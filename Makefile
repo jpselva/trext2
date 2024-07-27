@@ -1,2 +1,2 @@
-all:
-	gcc test/*.c ext2.c -I .
+tests:
+	gcc -g -O2 test/test.c ext2.c -DEXT2_TESTING

@@ -1,0 +1,11 @@
+# ignore everything...
+*
+
+# ...except:
+!.gitignore
+!*.c
+!*.h
+!test
+!test/**
+!Maefile
+!README.md

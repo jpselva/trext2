@@ -3,7 +3,16 @@
 
 #include <stdint.h>
 
-typedef struct {
+typedef struct ext2_config_t {
+    int (*read)(uint32_t start, uint32_t size, void* buffer);
+} ext2_config_t;
+
+typedef struct ext2_t {
+    ext2_config_t config;
+    uint32_t block_size;
+} ext2_t;
+
+typedef struct ext2_superblock_t {
     uint32_t inodes_count;
     uint32_t blocks_count;
     uint32_t r_blocks_count;
@@ -29,6 +38,8 @@ typedef struct {
     uint32_t rev_level;
     uint16_t def_resuid;
     uint16_t def_resgid;
-} ext2_superblock;
+} ext2_superblock_t;
+
+int ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
 
 #endif
