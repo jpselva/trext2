@@ -9,7 +9,7 @@
 #define test(descr, cond)                         \
     ((cond) ?                                     \
         printf("  PASS: %s\n", descr) :           \
-        printf(">>FAIL: %s (%s)\n", descr, #cond));
+        printf("  FAIL: %s (%s)\n", descr, #cond));
 
 
 /*************************************
@@ -39,21 +39,22 @@ ext2_config_t ext2_cfg = {
 /*************************************
  * Tests                             *
  *************************************/
-void test_read_superblock() {
-    testsuite("read superblock");
-
-    ext2_superblock_t super;
-
-    int error = read_superblock(&ext2, &super);
-
-    test("superblock read succeeds", error == 0);
+void test_mount() {
+    testsuite("test mount");
+    test("block size is correct", ext2.block_size == 1024);
 }
 
 int main() {
     diskimg_fd = fopen(DISKIMG_FILE, "r");
-    ext2_mount(&ext2, &ext2_cfg);
+    int mount_error = ext2_mount(&ext2, &ext2_cfg);
 
-    test_read_superblock();
+    if (mount_error) {
+        printf("mount error");
+        return 1;
+    }
 
+    test_mount();
+
+    fclose(diskimg_fd);
     return 0;
 }
