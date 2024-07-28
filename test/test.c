@@ -44,6 +44,14 @@ void test_mount() {
     test("block size is correct", ext2.block_size == 1024);
 }
 
+void test_read_block_group_desc() {
+    testsuite("read block group descriptor");
+
+    ext2_block_group_descriptor_t bgd;
+    read_block_group_descriptor(&ext2, 1, &bgd);
+    test("ok", 1);
+}
+
 int main() {
     diskimg_fd = fopen(DISKIMG_FILE, "r");
     int mount_error = ext2_mount(&ext2, &ext2_cfg);
@@ -54,6 +62,7 @@ int main() {
     }
 
     test_mount();
+    test_read_block_group_desc();
 
     fclose(diskimg_fd);
     return 0;

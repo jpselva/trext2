@@ -8,6 +8,8 @@ if [ $1 = "mount" ]; then # if command is mount...
     # create the mountpoint if it doesn't exist
     [ ! -d $MNTPOINT ] && mkdir $MNTPOINT
 
+    chmod a+rw -R $MNTPOINT
+
     # associate loop device 0 to disk.img
     losetup /dev/loop0 disk.img
 

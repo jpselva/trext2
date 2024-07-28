@@ -40,6 +40,17 @@ typedef struct ext2_superblock_t {
     uint16_t def_resgid;
 } ext2_superblock_t;
 
+typedef struct ext2_block_group_descriptor_t {
+    uint32_t block_bitmap;
+    uint32_t inode_bitmap;
+    uint32_t inode_table;
+    uint16_t free_blocks_count;
+    uint16_t free_inodes_count;
+    uint16_t used_dirs_count;
+    uint16_t pad;
+    uint32_t reserved[3];
+} ext2_block_group_descriptor_t;
+
 int ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
 
 #endif
