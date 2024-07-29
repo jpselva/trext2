@@ -6,6 +6,8 @@
 !*.c
 !*.h
 !test
-!test/**
-!Maefile
+!test/*
+!Makefile
 !README.md
+
+**.img
