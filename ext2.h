@@ -66,6 +66,27 @@ typedef struct ext2_block_group_descriptor_t {
     uint32_t reserved[3];
 } ext2_block_group_descriptor_t;
 
+typedef struct ext2_inode_t {
+    uint16_t mode;
+    uint16_t uid;
+    uint32_t size;
+    uint32_t atime;
+    uint32_t ctime;
+    uint32_t mtime;
+    uint32_t dtime;
+    uint16_t gid;
+    uint16_t links_count;
+    uint32_t blocks;
+    uint32_t flags;
+    uint32_t osd1;
+    uint32_t block[15];
+    uint32_t generation;
+    uint32_t file_acl;
+    uint32_t dir_acl;
+    uint32_t faddr;
+    uint32_t osd2[3];
+} ext2_inode_t;
+
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
 
 #endif
