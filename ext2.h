@@ -2,6 +2,9 @@
 #define EXT2_H
 
 #include <stdint.h>
+#include <string.h>
+
+#define EXT2_ROOT_INODE 2
 
 // trext2-specific errors. All user-defined errors should be negative (see the
 // ext2_config_t struct below)
@@ -70,6 +73,13 @@ typedef struct ext2_inode_t {
     uint32_t osd2[3];
 } ext2_inode_t;
 
+typedef struct ext2_directory_entry_t {
+    uint32_t inode;
+    uint16_t rec_len;
+    uint8_t name_len;
+    uint8_t file_type;
+} ext2_directory_entry_t;
+
 // configuration used to mount a filesystem
 typedef struct ext2_config_t {
     // user defined read function. Negative return values will be passed back 
@@ -93,4 +103,6 @@ ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
 
 // REMOVE THESE LATER
 ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);
+ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset, 
+        uint32_t size, void* buffer);
 #endif

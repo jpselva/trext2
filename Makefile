@@ -4,7 +4,7 @@ TEST_EXECUTABLES := $(TEST_SOURCES:.c=)
 CC := gcc
 CFLAGS := -Wall -g -O2 -Wconversion
 
-all: $(TEST_EXECUTABLES)
+all: $(TEST_EXECUTABLES) ext2.c ext2.h
 
 test/%: test/%.c test/utils.c test/utils.h
 	$(CC) $(CFLAGS) -o $@ $< test/utils.c ext2.c

@@ -39,7 +39,68 @@ ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode
     uint32_t inode_size = sizeof(ext2_inode_t);
     uint32_t inode_addr = inode_table_addr + offset_inside_group * inode_size;
 
-    return ext2->read(inode_addr, inode_size, &inode, ext2->context);
+    return ext2->read(inode_addr, inode_size, inode, ext2->context);
+}
+
+uint32_t block_map(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset) {
+    uint32_t blk_index = offset / ext2->block_size;
+
+    uint32_t bpb = ext2->block_size / 4;
+
+    if (blk_index < 12) {
+        return inode->block[blk_index]; 
+    }
+
+    uint32_t block;
+
+    blk_index -= 11;
+
+    uint32_t i1 = blk_index % bpb;
+    uint32_t i3 = blk_index/(bpb * bpb);
+    uint32_t i2 = blk_index/bpb - i3 * bpb;
+
+    uint32_t indexes[3] = {i1 - 1, i2 - 1, i3 - 1};     
+
+    int indirection = (i3 > 0) ? 3 : (i2 > 0) ? 2 : 1;
+    block = inode->block[11 + indirection];
+
+    while (indirection > 0 && block != 0) {
+        ext2->read(block * ext2->block_size + indexes[indirection - 1] * sizeof(uint32_t), 
+                sizeof(uint32_t), 
+                &block, 
+                ext2->context);
+        indirection -= 1;
+    }
+
+    return block;
+}
+
+ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset, 
+        uint32_t size, void* buffer) {
+    while (size > 0) {
+        uint32_t datablock = block_map(ext2, inode, offset);
+
+        uint32_t block_offset = offset % ext2->block_size;
+        uint32_t remaining = ext2->block_size - block_offset;
+        uint32_t bytes_to_read = (remaining < size) ? remaining : size;
+
+        ext2_error_t error;
+
+        if (datablock == 0) {
+            memset(buffer, 0, bytes_to_read);
+        } else {
+            error = ext2->read(datablock * ext2->block_size + block_offset,  
+                remaining, (uint8_t*)buffer + offset, ext2->context);
+        }
+
+        if (error != 0)
+            return error;
+
+        offset += bytes_to_read;
+        size -= bytes_to_read;
+    }
+
+    return 0;
 }
 
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {

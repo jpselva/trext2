@@ -25,8 +25,15 @@ int main() {
     exec_cmd_fail("debugfs -w %s -R \"write /tmp/hello foo/hello\"", 
             DISKIMG_FILE);
 
-
     int result = ext2_mount(&ext2, &cfg);
+
+    ext2_inode_t inode;
+
+    read_inode(&ext2, 2, &inode);
+
+    uint8_t buf[2048];
+
+    read_data(&ext2, &inode, 0, inode.size, buf);
 
     test("mount succeeded", result == 0);
 }
