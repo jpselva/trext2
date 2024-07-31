@@ -20,6 +20,28 @@ ext2_error_t read_block_group_descriptor(ext2_t* ext2, uint32_t group,
     return ext2->read(start, size, bgd, ext2->context);
 }
 
+ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode) {
+    if (inode_number > ext2->superblk.inodes_count) {
+        return EXT2_ERR_INODE_NOT_FOUND;
+    }
+
+    uint32_t inodes_per_group = ext2->superblk.inodes_per_group;
+    uint32_t block_group = (inode_number - 1) / inodes_per_group; 
+    uint32_t offset_inside_group = (inode_number - 1) % inodes_per_group;
+
+    ext2_block_group_descriptor_t bgd;
+    ext2_error_t bgd_error = read_block_group_descriptor(ext2, block_group, &bgd);
+
+    if (bgd_error)
+        return bgd_error;
+
+    uint32_t inode_table_addr = bgd.inode_table * ext2->block_size;
+    uint32_t inode_size = sizeof(ext2_inode_t);
+    uint32_t inode_addr = inode_table_addr + offset_inside_group * inode_size;
+
+    return ext2->read(inode_addr, inode_size, &inode, ext2->context);
+}
+
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
     ext2_superblock_t superblk;
 
@@ -31,6 +53,7 @@ ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
     if (superblk_error < 0)
         return superblk_error;
     
+    ext2->superblk = superblk;
     ext2->block_size = 1024 << superblk.log_block_size;
 
     // if the block size is huge (> 2 GiB), block_size will overflow

@@ -7,25 +7,8 @@
 // ext2_config_t struct below)
 typedef enum ext2_error_t {
     EXT2_ERR_BIG_BLOCK = 1,
+    EXT2_ERR_INODE_NOT_FOUND,
 } ext2_error_t;
-
-// configuration used to mount a filesystem
-typedef struct ext2_config_t {
-    // user defined read function. Negative return values will be passed back 
-    // to the caller
-    int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
-
-    // this will be passed to the user defined read/write functions, you can
-    // put whatever you want here
-    void* context;
-} ext2_config_t;
-
-// holds state and information about a mounted filesystem
-typedef struct ext2_t {
-    int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
-    uint32_t block_size;
-    void* context;
-} ext2_t;
 
 typedef struct ext2_superblock_t {
     uint32_t inodes_count;
@@ -87,6 +70,27 @@ typedef struct ext2_inode_t {
     uint32_t osd2[3];
 } ext2_inode_t;
 
+// configuration used to mount a filesystem
+typedef struct ext2_config_t {
+    // user defined read function. Negative return values will be passed back 
+    // to the caller
+    int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
+
+    // this will be passed to the user defined read/write functions, you can
+    // put whatever you want here
+    void* context;
+} ext2_config_t;
+
+// holds state and information about a mounted filesystem
+typedef struct ext2_t {
+    int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
+    uint32_t block_size;
+    void* context;
+    ext2_superblock_t superblk;
+} ext2_t;
+
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
 
+// REMOVE THESE LATER
+ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);
 #endif
