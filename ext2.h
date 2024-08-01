@@ -5,12 +5,14 @@
 #include <string.h>
 
 #define EXT2_ROOT_INODE 2
+#define EXT2_MAX_FILE_NAME 255
 
 // trext2-specific errors. All user-defined errors should be negative (see the
 // ext2_config_t struct below)
 typedef enum {
     EXT2_ERR_BIG_BLOCK = 1,
     EXT2_ERR_INODE_NOT_FOUND,
+    EXT2_ERR_FILENAME_TOO_BIG,
 } ext2_error_t;
 
 typedef struct {
@@ -99,10 +101,15 @@ typedef struct {
     ext2_superblock_t superblk;
 } ext2_t;
 
+typedef struct {
+
+} ext2_file_t;
+
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
 
 // REMOVE THESE LATER
 ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);
 ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset, 
         uint32_t size, void* buffer);
+int parse_filename(const char* path, char* filename);
 #endif

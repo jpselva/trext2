@@ -101,6 +101,29 @@ ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset,
     return 0;
 }
 
+// extracts the first name before the '/' in a file path. filename should have
+// at least EXT2_MAX_FILE_NAME bytes. Returns the number of chars read or a
+// negative number if the file name exceeds EXT2_MAX_FILE_NAME
+int parse_filename(const char* path, char* filename) {
+    int i = 0;
+    char c = *(path++);
+    while (c != '\0' && c != '/' && i < EXT2_MAX_FILE_NAME) {
+        filename[i++] = c;
+        c = *(path++);
+    }
+
+    if (i >= EXT2_MAX_FILE_NAME)
+        return -1;
+
+    filename[i] = '\0';
+
+    return i;
+}
+
+ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
+    return 0;
+}
+
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
     ext2_superblock_t superblk;
 

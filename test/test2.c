@@ -27,13 +27,18 @@ int main() {
 
     int result = ext2_mount(&ext2, &cfg);
 
-    ext2_inode_t inode;
-
-    read_inode(&ext2, 2, &inode);
-
-    uint8_t buf[2048];
-
-    read_data(&ext2, &inode, 0, inode.size, buf);
-
     test("mount succeeded", result == 0);
+
+    ext2_inode_t inode;
+    read_inode(&ext2, 2, &inode);
+    ext2_directory_entry_t entry;
+    read_data(&ext2, &inode, 0, sizeof(ext2_directory_entry_t), &entry);
+
+    //char buf[EXT2_MAX_FILE_NAME + 1];
+    //int res = parse_filename("foo/bar/hello", buf);
+
+    //test("filename correct", strcmp(buf, "foo") == 0);
+    //test("size correct", res == 3);
+
+    return 0;
 }
