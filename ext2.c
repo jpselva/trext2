@@ -45,16 +45,13 @@ ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode
 uint32_t block_map(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset) {
     uint32_t blk_index = offset / ext2->block_size;
 
-    uint32_t bpb = ext2->block_size / 4;
-
     if (blk_index < 12) {
         return inode->block[blk_index]; 
     }
 
-    uint32_t block;
-
     blk_index -= 11;
 
+    uint32_t bpb = ext2->block_size / 4;
     uint32_t i1 = blk_index % bpb;
     uint32_t i3 = blk_index/(bpb * bpb);
     uint32_t i2 = blk_index/bpb - i3 * bpb;
@@ -62,7 +59,8 @@ uint32_t block_map(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset) {
     uint32_t indexes[3] = {i1 - 1, i2 - 1, i3 - 1};     
 
     int indirection = (i3 > 0) ? 3 : (i2 > 0) ? 2 : 1;
-    block = inode->block[11 + indirection];
+
+    uint32_t block = inode->block[11 + indirection];
 
     while (indirection > 0 && block != 0) {
         ext2->read(block * ext2->block_size + indexes[indirection - 1] * sizeof(uint32_t), 
