@@ -2,32 +2,20 @@
 #define EXT2_H
 
 #include <stdint.h>
+#include <string.h>
+
+#define EXT2_ROOT_INODE 2
+#define EXT2_MAX_FILE_NAME 255
 
 // trext2-specific errors. All user-defined errors should be negative (see the
 // ext2_config_t struct below)
-typedef enum ext2_error_t {
+typedef enum {
     EXT2_ERR_BIG_BLOCK = 1,
+    EXT2_ERR_INODE_NOT_FOUND,
+    EXT2_ERR_FILENAME_TOO_BIG,
 } ext2_error_t;
 
-// configuration used to mount a filesystem
-typedef struct ext2_config_t {
-    // user defined read function. Negative return values will be passed back 
-    // to the caller
-    int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
-
-    // this will be passed to the user defined read/write functions, you can
-    // put whatever you want here
-    void* context;
-} ext2_config_t;
-
-// holds state and information about a mounted filesystem
-typedef struct ext2_t {
-    int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
-    uint32_t block_size;
-    void* context;
-} ext2_t;
-
-typedef struct ext2_superblock_t {
+typedef struct {
     uint32_t inodes_count;
     uint32_t blocks_count;
     uint32_t r_blocks_count;
@@ -55,7 +43,7 @@ typedef struct ext2_superblock_t {
     uint16_t def_resgid;
 } ext2_superblock_t;
 
-typedef struct ext2_block_group_descriptor_t {
+typedef struct {
     uint32_t block_bitmap;
     uint32_t inode_bitmap;
     uint32_t inode_table;
@@ -66,7 +54,7 @@ typedef struct ext2_block_group_descriptor_t {
     uint32_t reserved[3];
 } ext2_block_group_descriptor_t;
 
-typedef struct ext2_inode_t {
+typedef struct {
     uint16_t mode;
     uint16_t uid;
     uint32_t size;
@@ -87,6 +75,41 @@ typedef struct ext2_inode_t {
     uint32_t osd2[3];
 } ext2_inode_t;
 
+typedef struct {
+    uint32_t inode;
+    uint16_t rec_len;
+    uint8_t name_len;
+    uint8_t file_type;
+} ext2_directory_entry_t;
+
+// configuration used to mount a filesystem
+typedef struct {
+    // user defined read function. Negative return values will be passed back 
+    // to the caller
+    int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
+
+    // this will be passed to the user defined read/write functions, you can
+    // put whatever you want here
+    void* context;
+} ext2_config_t;
+
+// holds state and information about a mounted filesystem
+typedef struct {
+    int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
+    uint32_t block_size;
+    void* context;
+    ext2_superblock_t superblk;
+} ext2_t;
+
+typedef struct {
+
+} ext2_file_t;
+
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
 
+// REMOVE THESE LATER
+ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);
+ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset, 
+        uint32_t size, void* buffer);
+int parse_filename(const char* path, char* filename);
 #endif

@@ -6,8 +6,7 @@ CFLAGS := -Wall -g -O2 -Wconversion
 
 all: $(TEST_EXECUTABLES)
 
-# Pattern rule to link .o files to executables
-test/%: test/%.c
+test/%: test/%.c test/utils.c test/utils.h ext2.c ext2.h
 	$(CC) $(CFLAGS) -o $@ $< test/utils.c ext2.c
 
 run-tests: $(TEST_EXECUTABLES)

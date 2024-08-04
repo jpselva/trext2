@@ -6,7 +6,8 @@
 !*.c
 !*.h
 !test
-!test/*
+!test/*.c
+!test/*.h
 !Makefile
 !README.md
 
