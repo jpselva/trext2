@@ -7,6 +7,5 @@ A simplified implementation of the ext2 filesystem
 To run the tests, execute:
 
 ```
-$ make tests
-$ ./a.out
+$ make run-tests
 ```
