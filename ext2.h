@@ -13,6 +13,7 @@ typedef enum {
     EXT2_ERR_BIG_BLOCK = 1,
     EXT2_ERR_INODE_NOT_FOUND,
     EXT2_ERR_FILENAME_TOO_BIG,
+    EXT2_ERR_DATA_OUT_OF_BOUNDS,
 } ext2_error_t;
 
 typedef struct {

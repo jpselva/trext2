@@ -75,6 +75,11 @@ uint32_t block_map(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset) {
 
 ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset, 
         uint32_t size, void* buffer) {
+    if (offset + size >= inode->size) {
+        // access is outside of file
+        return EXT2_ERR_DATA_OUT_OF_BOUNDS;
+    }
+
     while (size > 0) {
         uint32_t datablock = block_map(ext2, inode, offset);
 
@@ -121,7 +126,24 @@ int parse_filename(const char* path, char* filename) {
     return i;
 }
 
+ext2_error_t get_directory_entry(ext2_t* ext2, const ext2_inode_t* parent_inode, 
+        const char* name, ext2_inode_t* inode) {
+    ext2_directory_entry_t entry;
+    uint32_t offset = 0;
+    uint32_t size = sizeof(ext2_directory_entry_t);
+    char current_name[EXT2_MAX_FILE_NAME + 1];
+
+    do {
+        ext2->read(offset, size, &entry, ext2->context);
+        ext2->read(offset + size, entry.name_len, current_name, ext2->context);
+        current_name[entry.name_len] = '\0';
+    } while (strcmp(current_name, name) != 0);
+
+    // TODO
+}
+
 ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
+    uint32_t inode = EXT
     return 0;
 }
 
