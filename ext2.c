@@ -42,7 +42,7 @@ ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode
     return ext2->read(inode_addr, inode_size, inode, ext2->context);
 }
 
-uint32_t block_map(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset) {
+uint32_t block_map(ext2_t* ext2, const ext2_inode_t* inode, uint32_t offset) {
     uint32_t blk_index = offset / ext2->block_size;
 
     if (blk_index < 12) {
@@ -73,7 +73,7 @@ uint32_t block_map(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset) {
     return block;
 }
 
-ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset, 
+ext2_error_t read_data(ext2_t* ext2, const ext2_inode_t* inode, uint32_t offset, 
         uint32_t size, void* buffer) {
     if (offset + size >= inode->size) {
         // access is outside of file
@@ -134,16 +134,35 @@ ext2_error_t get_directory_entry(ext2_t* ext2, const ext2_inode_t* parent_inode,
     char current_name[EXT2_MAX_FILE_NAME + 1];
 
     do {
-        ext2->read(offset, size, &entry, ext2->context);
-        ext2->read(offset + size, entry.name_len, current_name, ext2->context);
+        read_data(ext2, parent_inode, offset, size, &entry);
+
+        if (entry.inode == 0)
+            return EXT2_ERR_FILE_NOT_FOUND;
+
+        read_data(ext2, parent_inode, offset + size, entry.name_len, current_name);
         current_name[entry.name_len] = '\0';
+        offset += entry.rec_len;
     } while (strcmp(current_name, name) != 0);
 
-    // TODO
+    return read_inode(ext2, entry.inode, inode);
 }
 
 ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
-    uint32_t inode = EXT
+    ext2_inode_t inode;
+    char current_name[EXT2_MAX_FILE_NAME + 1];
+    read_inode(ext2, EXT2_ROOT_INODE, &inode);
+
+    uint32_t chars_read;
+    while ((chars_read = parse_filename(path, current_name)) > 0) {
+        ext2_inode_t next_inode;
+        ext2_error_t error = get_directory_entry(ext2, &inode, current_name, &next_inode);
+        if (error)
+            return error;
+        inode = next_inode;
+        path += chars_read;
+    }
+
+    file->inode = inode;
     return 0;
 }
 
