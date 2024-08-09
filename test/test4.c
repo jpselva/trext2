@@ -26,10 +26,16 @@ int main(void) {
     ext2_file_t file;
 
     ext2_mount(&ext2, &cfg);
-    ext2_open(&ext2, "foo/hello", &file);
+    ext2_error_t error = ext2_open(&ext2, "/foo/hello", &file);
+
+    test("opens successfuly", error == 0);
 
     char buf[100];
-    read_data(&ext2, &file.inode, 0, 12, buf);
+    error = read_data(&ext2, &file.inode, 0, 13, buf);
+    buf[13] = '\0';
+
+    test("reads ok", error == 0);
+    test("data is correct", strcmp(buf, "hello world!\n") == 0);
 
     return 0;
 }
