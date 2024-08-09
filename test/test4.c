@@ -13,7 +13,7 @@ ext2_config_t cfg = {
 };
 
 int main(void) {
-    testsuite("directory search");
+    testsuite("file open");
 
     exec_cmd_fail("dd if=/dev/zero of=%s bs=1k count=2048", DISKIMG_FILE);
     exec_cmd_fail("mkfs.ext2 -r 0 -b %d -g %d %s", BLOCKSZ, BLOCKS_PER_GROUP, 

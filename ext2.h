@@ -106,10 +106,12 @@ typedef struct {
 
 typedef struct {
     ext2_inode_t inode;
+    uint32_t offset;
 } ext2_file_t;
 
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
 ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file);
+ext2_error_t ext2_file_read(ext2_t* ext2, ext2_file_t* file, uint32_t size, void* buf);
 
 // REMOVE THESE LATER
 ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);

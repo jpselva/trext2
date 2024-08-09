@@ -156,6 +156,28 @@ ext2_error_t get_directory_entry(ext2_t* ext2, const ext2_inode_t* parent_inode,
     return read_inode(ext2, entry.inode, inode);
 }
 
+ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
+    ext2_superblock_t superblk;
+
+    ext2->read = cfg->read;
+    ext2->context = cfg->context;
+
+    int superblk_error = read_superblock(ext2, &superblk);
+
+    if (superblk_error < 0)
+        return superblk_error;
+    
+    ext2->superblk = superblk;
+    ext2->block_size = 1024 << superblk.log_block_size;
+
+    // if the block size is huge (> 2 GiB), block_size will overflow
+    if (ext2->block_size == 0) {
+        return EXT2_ERR_BIG_BLOCK;
+    }
+
+    return 0; 
+}
+
 ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
     ext2_inode_t inode;
     char current_name[EXT2_MAX_FILE_NAME + 1];
@@ -187,28 +209,11 @@ ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
     }
 
     file->inode = inode;
+    file->offset = 0;
     return 0;
 }
 
-ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
-    ext2_superblock_t superblk;
-
-    ext2->read = cfg->read;
-    ext2->context = cfg->context;
-
-    int superblk_error = read_superblock(ext2, &superblk);
-
-    if (superblk_error < 0)
-        return superblk_error;
-    
-    ext2->superblk = superblk;
-    ext2->block_size = 1024 << superblk.log_block_size;
-
-    // if the block size is huge (> 2 GiB), block_size will overflow
-    if (ext2->block_size == 0) {
-        return EXT2_ERR_BIG_BLOCK;
-    }
-
-    return 0; 
+ext2_error_t ext2_file_read(ext2_t* ext2, ext2_file_t* file, 
+        uint32_t size, void* buf) {
+    return read_data(ext2, &file->inode, file->offset, size, buf);
 }
-
