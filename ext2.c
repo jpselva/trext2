@@ -186,9 +186,9 @@ ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
     uint32_t chars_read;
     ext2_error_t error;
 
-    if (path[0] != '/')
+    if (path[0] != '/') {
         return EXT2_ERR_BAD_PATH;
-    else if (path[1] != '\0') {
+    } else if (path[1] != '\0') {
         while (*path == '/') {
             path++;
 
@@ -216,4 +216,13 @@ ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
 ext2_error_t ext2_file_read(ext2_t* ext2, ext2_file_t* file, 
         uint32_t size, void* buf) {
     return read_data(ext2, &file->inode, file->offset, size, buf);
+}
+
+ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset) {
+    if (offset > file->inode.size) {
+        return EXT2_ERR_SEEK_OUT_OF_BOUNDS;
+    }
+
+    file->offset = offset;
+    return 0;
 }

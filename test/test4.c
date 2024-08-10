@@ -31,7 +31,7 @@ int main(void) {
     test("opens successfuly", error == 0);
 
     char buf[100];
-    error = read_data(&ext2, &file.inode, 0, 13, buf);
+    error = ext2_file_read(&ext2, &file, 13, buf);
     buf[13] = '\0';
 
     test("reads ok", error == 0);
