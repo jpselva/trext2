@@ -13,6 +13,10 @@ typedef enum {
     EXT2_ERR_BIG_BLOCK = 1,
     EXT2_ERR_INODE_NOT_FOUND,
     EXT2_ERR_FILENAME_TOO_BIG,
+    EXT2_ERR_DATA_OUT_OF_BOUNDS,
+    EXT2_ERR_FILE_NOT_FOUND,
+    EXT2_ERR_BAD_PATH,
+    EXT2_ERR_SEEK_OUT_OF_BOUNDS,
 } ext2_error_t;
 
 typedef struct {
@@ -102,14 +106,18 @@ typedef struct {
 } ext2_t;
 
 typedef struct {
-
+    ext2_inode_t inode;
+    uint32_t offset;
 } ext2_file_t;
 
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
+ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file);
+ext2_error_t ext2_file_read(ext2_t* ext2, ext2_file_t* file, uint32_t size, void* buf);
 
 // REMOVE THESE LATER
 ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);
-ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset, 
+ext2_error_t read_data(ext2_t* ext2, const ext2_inode_t* inode, uint32_t offset, 
         uint32_t size, void* buffer);
-int parse_filename(const char* path, char* filename);
+ext2_error_t parse_filename(const char* path, char* filename, uint32_t* chars_read);
+ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset);
 #endif

@@ -42,7 +42,7 @@ ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode
     return ext2->read(inode_addr, inode_size, inode, ext2->context);
 }
 
-uint32_t block_map(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset) {
+uint32_t block_map(ext2_t* ext2, const ext2_inode_t* inode, uint32_t offset) {
     uint32_t blk_index = offset / ext2->block_size;
 
     if (blk_index < 12) {
@@ -73,8 +73,13 @@ uint32_t block_map(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset) {
     return block;
 }
 
-ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset, 
+ext2_error_t read_data(ext2_t* ext2, const ext2_inode_t* inode, uint32_t offset, 
         uint32_t size, void* buffer) {
+    if (offset + size > inode->size) {
+        // access is outside of file
+        return EXT2_ERR_DATA_OUT_OF_BOUNDS;
+    }
+
     while (size > 0) {
         uint32_t datablock = block_map(ext2, inode, offset);
 
@@ -88,12 +93,13 @@ ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset,
             memset(buffer, 0, bytes_to_read);
         } else {
             error = ext2->read(datablock * ext2->block_size + block_offset,  
-                bytes_to_read, (uint8_t*)buffer + offset, ext2->context);
+                bytes_to_read, (uint8_t*)buffer, ext2->context);
         }
 
-        if (error != 0)
+        if (error)
             return error;
 
+        buffer = (uint8_t*)buffer + bytes_to_read;
         offset += bytes_to_read;
         size -= bytes_to_read;
     }
@@ -102,14 +108,14 @@ ext2_error_t read_data(ext2_t* ext2, ext2_inode_t* inode, uint32_t offset,
 }
 
 // extracts the first name before the '/' in a file path. filename should have
-// at least EXT2_MAX_FILE_NAME + 1 bytes. Returns the number of chars read or a
-// negative number if the file name exceeds EXT2_MAX_FILE_NAME
-int parse_filename(const char* path, char* filename) {
+// at least EXT2_MAX_FILE_NAME + 1 bytes. 
+ext2_error_t parse_filename(const char* path, char* filename, uint32_t* chars_read) {
     int i = 0;
     char c = *(path++);
+
     while (c != '\0' && c != '/') {
         if (i >= EXT2_MAX_FILE_NAME) {
-            return -1;
+            return EXT2_ERR_FILENAME_TOO_BIG;
         }
 
         filename[i++] = c;
@@ -118,11 +124,36 @@ int parse_filename(const char* path, char* filename) {
 
     filename[i] = '\0';
 
-    return i;
+    *chars_read = i;
+    return 0;
 }
 
-ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
-    return 0;
+ext2_error_t get_directory_entry(ext2_t* ext2, const ext2_inode_t* parent_inode, 
+        const char* name, ext2_inode_t* inode) {
+    ext2_directory_entry_t entry;
+    uint32_t offset = 0;
+    uint32_t size = sizeof(ext2_directory_entry_t);
+    char current_name[EXT2_MAX_FILE_NAME + 1];
+
+    do {
+        ext2_error_t error = read_data(ext2, parent_inode, offset, size, &entry);
+
+        if (error)
+            return error;
+
+        if (entry.inode == 0)
+            return EXT2_ERR_FILE_NOT_FOUND;
+
+        error = read_data(ext2, parent_inode, offset + size, entry.name_len, current_name);
+
+        if (error)
+            return error;
+
+        current_name[entry.name_len] = '\0';
+        offset += entry.rec_len;
+    } while (strcmp(current_name, name) != 0);
+
+    return read_inode(ext2, entry.inode, inode);
 }
 
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
@@ -147,3 +178,51 @@ ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
     return 0; 
 }
 
+ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
+    ext2_inode_t inode;
+    char current_name[EXT2_MAX_FILE_NAME + 1];
+    read_inode(ext2, EXT2_ROOT_INODE, &inode);
+
+    uint32_t chars_read;
+    ext2_error_t error;
+
+    if (path[0] != '/') {
+        return EXT2_ERR_BAD_PATH;
+    } else if (path[1] != '\0') {
+        while (*path == '/') {
+            path++;
+
+            error = parse_filename(path, current_name, &chars_read);
+
+            if (error)
+                return error;
+
+            ext2_inode_t next_inode;
+            error = get_directory_entry(ext2, &inode, current_name, &next_inode);
+
+            if (error)
+                return error;
+
+            inode = next_inode;
+            path += chars_read;
+        }
+    }
+
+    file->inode = inode;
+    file->offset = 0;
+    return 0;
+}
+
+ext2_error_t ext2_file_read(ext2_t* ext2, ext2_file_t* file, 
+        uint32_t size, void* buf) {
+    return read_data(ext2, &file->inode, file->offset, size, buf);
+}
+
+ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset) {
+    if (offset > file->inode.size) {
+        return EXT2_ERR_SEEK_OUT_OF_BOUNDS;
+    }
+
+    file->offset = offset;
+    return 0;
+}
