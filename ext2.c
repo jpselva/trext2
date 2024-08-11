@@ -178,7 +178,7 @@ ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
     return 0; 
 }
 
-ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
+ext2_error_t ext2_file_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
     ext2_inode_t inode;
     char current_name[EXT2_MAX_FILE_NAME + 1];
     read_inode(ext2, EXT2_ROOT_INODE, &inode);
@@ -215,7 +215,12 @@ ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
 
 ext2_error_t ext2_file_read(ext2_t* ext2, ext2_file_t* file, 
         uint32_t size, void* buf) {
-    return read_data(ext2, &file->inode, file->offset, size, buf);
+    ext2_error_t error = read_data(ext2, &file->inode, file->offset, size, buf);
+
+    if (!error)
+        file->offset += size;
+
+    return error;
 }
 
 ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset) {
@@ -225,4 +230,8 @@ ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset) {
 
     file->offset = offset;
     return 0;
+}
+
+uint32_t ext2_file_tell(ext2_t* ext2, const ext2_file_t* file) {
+    return file->offset;
 }

@@ -19,6 +19,8 @@ typedef enum {
     EXT2_ERR_SEEK_OUT_OF_BOUNDS,
 } ext2_error_t;
 
+// ext2 disk structures
+
 typedef struct {
     uint32_t inodes_count;
     uint32_t blocks_count;
@@ -86,6 +88,8 @@ typedef struct {
     uint8_t file_type;
 } ext2_directory_entry_t;
 
+// t-rext2 user structures
+
 // configuration used to mount a filesystem
 typedef struct {
     // user defined read function. Negative return values will be passed back 
@@ -111,13 +115,14 @@ typedef struct {
 } ext2_file_t;
 
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
-ext2_error_t ext2_open(ext2_t* ext2, const char* path, ext2_file_t* file);
+ext2_error_t ext2_file_open(ext2_t* ext2, const char* path, ext2_file_t* file);
 ext2_error_t ext2_file_read(ext2_t* ext2, ext2_file_t* file, uint32_t size, void* buf);
+ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset);
+uint32_t ext2_file_tell(ext2_t* ext2, const ext2_file_t* file);
 
 // REMOVE THESE LATER
 ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);
 ext2_error_t read_data(ext2_t* ext2, const ext2_inode_t* inode, uint32_t offset, 
         uint32_t size, void* buffer);
 ext2_error_t parse_filename(const char* path, char* filename, uint32_t* chars_read);
-ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset);
 #endif

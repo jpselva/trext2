@@ -26,7 +26,7 @@ int main(void) {
     ext2_file_t file;
 
     ext2_mount(&ext2, &cfg);
-    ext2_error_t error = ext2_open(&ext2, "/foo/hello", &file);
+    ext2_error_t error = ext2_file_open(&ext2, "/foo/hello", &file);
 
     test("opens successfuly", error == 0);
 

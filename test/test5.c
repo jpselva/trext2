@@ -66,12 +66,16 @@ int main(void) {
     ext2_error_t error;
 
     ext2_mount(&ext2, &cfg);
-    ext2_open(&ext2, "/foo/hello", &file);
+    ext2_file_open(&ext2, "/foo/hello", &file);
 
     char buf[100];
     error = ext2_file_seek(&ext2, &file, 600000);
+
+    test("offset is correct", ext2_file_tell(&ext2, &file) == 600000);
+
     error = ext2_file_read(&ext2, &file, 12, buf);
     buf[12] = '\0';
 
     test("read is correct", strcmp(buf, "Hello World!") == 0);
+    test("offset changes", ext2_file_tell(&ext2, &file) == 600000 + 12);
 }
