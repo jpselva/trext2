@@ -1,8 +1,3 @@
----
-title: t-rext2
-
----
-
 # t-rext2
 
 Implementação simplificada do sistema de arquivos ext2
