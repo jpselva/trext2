@@ -20,6 +20,20 @@ ext2_error_t read_block_group_descriptor(ext2_t* ext2, uint32_t group,
     return ext2->read(start, size, bgd, ext2->context);
 }
 
+ext2_error_t write_block_group_descriptor(ext2_t* ext2, uint32_t group, 
+        const ext2_block_group_descriptor_t* bgd) {
+    // size of a block group descriptor
+    uint32_t size = sizeof(ext2_block_group_descriptor_t);
+
+    // first block of the block group descriptor table
+    uint32_t first_block = (ext2->block_size > 1024) ? 1 : 2; 
+
+    // address of the block group descriptor
+    uint32_t start = first_block * ext2->block_size + group * size;
+
+    return ext2->write(start, size, bgd, ext2->context);
+}
+
 ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode) {
     if (inode_number > ext2->superblk.inodes_count) {
         return EXT2_ERR_INODE_NOT_FOUND;
@@ -156,10 +170,95 @@ ext2_error_t get_directory_entry(ext2_t* ext2, const ext2_inode_t* parent_inode,
     return read_inode(ext2, entry.inode, inode);
 }
 
+// Reserves a block inside a group. Sets 'block' to the first free block inside 
+// group or 0 if group has no free blocks. 
+ext2_error_t get_free_block_in_group(ext2_t* ext2, uint32_t group, 
+        uint32_t* block) {
+    ext2_block_group_descriptor_t bgd;
+    ext2_error_t error = read_block_group_descriptor(ext2, group, &bgd);
+
+    if (error)
+        return error;
+
+    const uint32_t bitmap_addr = bgd.block_bitmap * ext2->block_size;
+    const uint32_t blocks_per_group = ext2->superblk.blocks_per_group;
+    const uint32_t inode_table_size = ext2->superblk.inodes_per_group * 
+        sizeof(ext2_inode_t);
+    const uint32_t inode_table_block_count = inode_table_size / ext2->block_size + 
+        ((inode_table_size % ext2->block_size == 0) ? 0 : 1);
+    const uint32_t data_blocks_start = bgd.inode_table + inode_table_block_count;
+
+    *block = 0; // no free block found yet
+
+    if (bgd.free_blocks_count == 0)
+        return 0;
+
+    for (int i = 0; i < blocks_per_group/8; i++) {
+        uint8_t bitmap_byte;
+        error = ext2->read(bitmap_addr + i*8, 1, &bitmap_byte, ext2->context);
+
+        if (error)
+            return error;
+
+        int shift;
+        for (shift = 0; shift < 8; shift++) {
+            if ((bitmap_byte & (1 >> shift)) == 0) {
+                *block = i * 8 + shift + data_blocks_start;
+                
+                // update bgd
+                bgd.free_inodes_count -= 1;
+                write_block_group_descriptor(ext2, group, &bgd);
+
+                // update bitmap
+                uint8_t new_byte = bitmap_byte | (1 >> shift);
+                ext2->write(bitmap_addr + i*8, 1, &new_byte, ext2->context);
+
+                return 0;
+            }
+        }
+    }
+
+    return 0;
+}
+
+ext2_error_t  write_data(ext2_t* ext2, const ext2_inode_t* inode, uint32_t offset,
+        uint32_t size, void* buffer) {
+    uint32_t allocated_size = (inode->size / ext2->block_size)
+        * ext2->block_size + 1;
+
+    // blocos que o arquivo já tem
+    while (offset < allocated_size) {
+        uint32_t datablock = block_map(ext2, inode, offset);  
+
+        uint32_t block_offset = offset % ext2->block_size;
+        uint32_t remaining = ext2->block_size - block_offset;
+        uint32_t bytes_to_write = (remaining < size) ? remaining : size;
+
+        ext2_error_t error;
+
+        // TODO: write 0 to inode block number if block is all zeros
+        error = ext2->write(datablock * ext2->block_size + block_offset,
+            bytes_to_write, buffer, ext2->context);
+
+        if (error)
+            return error;
+
+        buffer = (uint8_t*)buffer + bytes_to_write;
+        offset += bytes_to_write;
+        size -= bytes_to_write;
+    }
+
+    // aumentar o arquivo
+    while (size > 0) {
+          
+    }
+}
+
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
     ext2_superblock_t superblk;
 
     ext2->read = cfg->read;
+    ext2->write = cfg->write;
     ext2->context = cfg->context;
 
     int superblk_error = read_superblock(ext2, &superblk);
@@ -169,6 +268,7 @@ ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
     
     ext2->superblk = superblk;
     ext2->block_size = 1024 << superblk.log_block_size;
+    ext2->block_group_count = superblk.inodes_count / superblk.inodes_per_group;
 
     // if the block size is huge (> 2 GiB), block_size will overflow
     if (ext2->block_size == 0) {

@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
+#include <math.h>
 
 #define EXT2_ROOT_INODE 2
 #define EXT2_MAX_FILE_NAME 255
@@ -96,6 +98,10 @@ typedef struct {
     // to the caller
     int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
 
+    // user defined write function. Negative return values will be passed back 
+    // to the caller
+    int (*write)(uint32_t start, uint32_t size, const void* buffer, void* context);
+
     // this will be passed to the user defined read/write functions, you can
     // put whatever you want here
     void* context;
@@ -104,8 +110,14 @@ typedef struct {
 // holds state and information about a mounted filesystem
 typedef struct {
     int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
+    int (*write)(uint32_t start, uint32_t size, const void* buffer, void* context);
+
     uint32_t block_size;
+    uint32_t block_group_count;
+    uint32_t inode_tables_block_count;
+
     void* context;
+
     ext2_superblock_t superblk;
 } ext2_t;
 
