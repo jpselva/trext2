@@ -14,11 +14,13 @@
 typedef enum {
     EXT2_ERR_BIG_BLOCK = 1,
     EXT2_ERR_INODE_NOT_FOUND,
+    EXT2_ERR_BGD_NOT_FOUND,
     EXT2_ERR_FILENAME_TOO_BIG,
     EXT2_ERR_DATA_OUT_OF_BOUNDS,
     EXT2_ERR_FILE_NOT_FOUND,
     EXT2_ERR_BAD_PATH,
     EXT2_ERR_SEEK_OUT_OF_BOUNDS,
+    EXT2_DISK_FULL,
 } ext2_error_t;
 
 // ext2 disk structures
@@ -60,7 +62,7 @@ typedef struct {
     uint16_t used_dirs_count;
     uint16_t pad;
     uint32_t reserved[3];
-} ext2_block_group_descriptor_t;
+} ext2_bgd_t; // block group descriptor
 
 typedef struct {
     uint16_t mode;
@@ -114,7 +116,6 @@ typedef struct {
 
     uint32_t block_size;
     uint32_t block_group_count;
-    uint32_t inode_tables_block_count;
 
     void* context;
 
@@ -122,7 +123,7 @@ typedef struct {
 } ext2_t;
 
 typedef struct {
-    ext2_inode_t inode;
+    uint32_t inode;
     uint32_t offset;
 } ext2_file_t;
 
@@ -134,7 +135,7 @@ uint32_t ext2_file_tell(ext2_t* ext2, const ext2_file_t* file);
 
 // REMOVE THESE LATER
 ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);
-ext2_error_t read_data(ext2_t* ext2, const ext2_inode_t* inode, uint32_t offset, 
+ext2_error_t read_data(ext2_t* ext2, uint32_t inode, uint32_t offset, 
         uint32_t size, void* buffer);
 ext2_error_t parse_filename(const char* path, char* filename, uint32_t* chars_read);
 #endif
