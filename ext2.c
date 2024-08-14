@@ -118,7 +118,7 @@ blk_indirection_info locate_offset(ext2_t* ext2, uint32_t offset) {
 
     blk_index -= 11;
 
-    uint32_t bpb = ext2->block_size / 4;
+    uint32_t bpb = ext2->block_size / sizeof(uint32_t);
     uint32_t i1 = blk_index % bpb;
     uint32_t i3 = blk_index/(bpb * bpb);
     uint32_t i2 = blk_index/bpb - i3 * bpb;
@@ -284,13 +284,17 @@ ext2_error_t get_free_block_in_group(ext2_t* ext2, uint32_t group,
 
         bool found_block = false;
         int shift;
-        while (!found_block && shift++ < 8)
-            found_block = ((bitmap_byte & (1 >> shift)) == 0);
+
+        for (shift = 0; shift < 8; shift++) {
+            found_block = ((bitmap_byte & (1 << shift)) == 0);
+            if (found_block)
+                break;
+        }
 
         if (found_block) {
             *block = i * 8 + shift + data_blocks_start;
 
-            bitmap_byte |= (1 >> shift);
+            bitmap_byte |= (1 << shift);
             ext2->write(bitmap_addr + i*8, 1, &bitmap_byte, ext2->context);
 
             bgd.free_blocks_count -= 1;
@@ -303,11 +307,9 @@ ext2_error_t get_free_block_in_group(ext2_t* ext2, uint32_t group,
 
 ext2_error_t get_new_block(ext2_t* ext2, uint32_t preferred_group, 
         uint32_t* block) {
-    ext2_error_t err = get_free_block_in_group(ext2, preferred_group, block);
-
     int group = preferred_group;
     do {
-        err = get_free_block_in_group(ext2, preferred_group, block);
+        ext2_error_t err = get_free_block_in_group(ext2, group, block);
 
         if (err)
             return err;
@@ -380,8 +382,8 @@ ext2_error_t  write_data(ext2_t* ext2, uint32_t inode, uint32_t offset,
     if (offset > inode_struct.size)
         return EXT2_ERR_DATA_OUT_OF_BOUNDS;
 
-    uint32_t allocated_size = (inode_struct.size / ext2->block_size)
-        * ext2->block_size + 1;
+    uint32_t allocated_size = CEIL(inode_struct.size, ext2->block_size) * 
+                                  ext2->block_size;
 
     while (size > 0) {
         uint32_t datablock;
