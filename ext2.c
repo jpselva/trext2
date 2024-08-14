@@ -1,6 +1,20 @@
 #include "ext2.h"
 #define CEIL(x, y) ((x)/(y) + (((x) % (y) == 0) ? 0 : 1))
 
+// blk_indirection_info
+//
+// explains how a block should be reached from the inode.block array
+//
+typedef struct {
+    int indirection; // from 0 (direct) to 3 (triply-indirect)
+
+    uint32_t indexes[4];
+    // 1st element = index in the inode.block array, from 0 to 14
+    // 2nd element = index in the 1st indirect block (if indirection > 0)
+    // 3rd element = index in the 2nd indirect block (if indirection > 1)
+    // 4th element = index in the 3rd indirect block (if indirection > 2)
+} blk_indirection_info;
+
 ext2_error_t read_superblock(ext2_t* ext2, ext2_superblock_t* superblk) {
     // superblock starts at 1024th byte
     return ext2->read(1024, sizeof(ext2_superblock_t), 
@@ -92,16 +106,14 @@ ext2_error_t write_inode(ext2_t* ext2, uint32_t inode_number, const ext2_inode_t
     return ext2->write(inode_addr, sizeof(ext2_inode_t), inode, ext2->context);
 }
 
-ext2_error_t block_map(ext2_t* ext2, uint32_t inode, uint32_t offset, uint32_t* block) {
-    ext2_inode_t inode_struct;
-    ext2_error_t error = read_inode(ext2, inode, &inode_struct);
-    if (error)
-        return error;
-
+blk_indirection_info locate_offset(ext2_t* ext2, uint32_t offset) {
+    blk_indirection_info ind_info;
     uint32_t blk_index = offset / ext2->block_size;
+
     if (blk_index < 12) {
-        *block = inode_struct.block[blk_index]; 
-        return 0;
+        ind_info.indirection = 0;
+        ind_info.indexes[0] = blk_index;
+        return ind_info;
     }
 
     blk_index -= 11;
@@ -111,20 +123,36 @@ ext2_error_t block_map(ext2_t* ext2, uint32_t inode, uint32_t offset, uint32_t* 
     uint32_t i3 = blk_index/(bpb * bpb);
     uint32_t i2 = blk_index/bpb - i3 * bpb;
 
-    uint32_t indexes[3] = {i1 - 1, i2 - 1, i3 - 1};     
+    int ind = (i3 > 0) ? 3 : (i2 > 0) ? 2 : 1;
 
-    int indirection = (i3 > 0) ? 3 : (i2 > 0) ? 2 : 1;
+    ind_info.indirection = ind;
+    ind_info.indexes[0] = 11 + ind;
+    ind_info.indexes[1] = (ind == 3) ? i3 - 1 : (ind == 2) ? i2 - 1 : i1 - 1;
+    ind_info.indexes[2] = (ind == 3) ? i2 - 1 : i1 - 1;
+    ind_info.indexes[3] = i1 - 1;
 
-    *block = inode_struct.block[11 + indirection];
+    return ind_info;
+}
 
-    while (indirection > 0 && block != 0) {
-        error = ext2->read(*block * ext2->block_size + indexes[indirection - 1] * sizeof(uint32_t), 
-                    sizeof(uint32_t), 
-                    block, 
-                    ext2->context);
+ext2_error_t block_map(ext2_t* ext2, uint32_t inode, uint32_t offset, uint32_t* block) {
+    ext2_inode_t inode_struct;
+    ext2_error_t error = read_inode(ext2, inode, &inode_struct);
+    if (error)
+        return error;
+
+    blk_indirection_info ind_info = locate_offset(ext2, offset);
+
+    *block = inode_struct.block[ind_info.indexes[0]];
+
+    for(int i = 1; i <= ind_info.indirection; i++) {
+        if (*block == 0) // block 0 implies data block is all zeros, so stop here
+            break;
+
+        uint32_t addr = *block * ext2->block_size + ind_info.indexes[i] * sizeof(uint32_t);
+
+        error = ext2->read(addr, sizeof(uint32_t), block, ext2->context);
         if (error)
             return error;
-        indirection -= 1;
     }
 
     return 0;
@@ -305,38 +333,20 @@ ext2_error_t add_block(ext2_t* ext2, uint32_t inode, uint32_t* block) {
     err = read_inode(ext2, inode, &inode_struct);
     group = get_inode_group(ext2, inode);
 
-    uint32_t new_blk_index = (inode_struct.size == 0) ? 
-        0 : 
-        CEIL(inode_struct.size, ext2->block_size);
+    uint32_t offset = inode_struct.size + ext2->block_size - 1;
+    blk_indirection_info ind_info = locate_offset(ext2, offset);
 
-    int indirection = 0;
-    uint32_t indexes[] = {0, 0, 0, 0};
     uint32_t block_ptr;
 
-    if (new_blk_index > 11) {
-        new_blk_index -= 11;
-
-        uint32_t bpb = ext2->block_size / 4;
-        uint32_t i1 = new_blk_index % bpb;
-        uint32_t i3 = new_blk_index/(bpb * bpb);
-        uint32_t i2 = new_blk_index/bpb - i3 * bpb;
-
-        int indirection = (i3 > 0) ? 3 : (i2 > 0) ? 2 : (i1 > 0) ? 1 : 0;
-
-        indexes[1] = i1 - 1; indexes[2] = i2 - 1; indexes[3] = i3 - 1;
-
-        block_ptr = ((uint8_t*)(&inode_struct.block[11 + indirection]) - 
-                (uint8_t*)&inode_struct) + inode_addr;
-    } else
-        block_ptr = ((uint8_t*)(&inode_struct.block[new_blk_index]) - 
-                (uint8_t*)&inode_struct) + inode_addr;
+    block_ptr = ((uint8_t*)(&inode_struct.block[ind_info.indexes[0]]) - 
+            (uint8_t*)&inode_struct) + inode_addr;
 
     uint32_t next_block;
 
-    while (indirection > 0) {
+    for (int i = 1; i <= ind_info.indirection; i++) {
         bool is_blk_missing = true;
-        for (int i = indirection; i >= 0; i++)
-            is_blk_missing = is_blk_missing && (indexes[i] == 0);
+        for (int j = i; j > 0; j--)
+            is_blk_missing = is_blk_missing && (ind_info.indexes[j] == 0);
 
         if (is_blk_missing) {
             err = get_new_block(ext2, group, &next_block);
@@ -345,19 +355,20 @@ ext2_error_t add_block(ext2_t* ext2, uint32_t inode, uint32_t* block) {
                 return err;
 
             ext2->write(block_ptr, 4, &next_block, ext2->context);
-        } else
+        } else {
             ext2->read(block_ptr, 4, &next_block, ext2->context);
+        }
 
-        block_ptr = next_block * ext2->block_size + indexes[indirection];
-        indirection -= 1;
+        block_ptr = next_block * ext2->block_size + 
+            ind_info.indexes[i] * sizeof(uint32_t);
     }
 
     *block = next_block;
     return 0;
 }
 
-ext2_error_t  write_data(ext2_t* ext2, const uint32_t inode, uint32_t offset,
-        uint32_t size, void* buffer) {
+ext2_error_t  write_data(ext2_t* ext2, uint32_t inode, uint32_t offset,
+        uint32_t size, const void* buffer) {
     ext2_error_t error;
     ext2_inode_t inode_struct;
 
@@ -366,13 +377,16 @@ ext2_error_t  write_data(ext2_t* ext2, const uint32_t inode, uint32_t offset,
     if (error)
         return error;
 
+    if (offset > inode_struct.size)
+        return EXT2_ERR_DATA_OUT_OF_BOUNDS;
+
     uint32_t allocated_size = (inode_struct.size / ext2->block_size)
         * ext2->block_size + 1;
 
     while (size > 0) {
         uint32_t datablock;
 
-        if (offset >= inode_struct.size) {
+        if (offset >= allocated_size) {
             error = add_block(ext2, inode, &datablock);
         } else {
             error = block_map(ext2, inode, offset, &datablock);  
@@ -484,4 +498,14 @@ ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset) {
 
 uint32_t ext2_file_tell(ext2_t* ext2, const ext2_file_t* file) {
     return file->offset;
+}
+
+ext2_error_t ext2_file_write(ext2_t* ext2, ext2_file_t* file, 
+        uint32_t size, const void* buf) {
+    ext2_error_t error = write_data(ext2, file->inode, file->offset, size, buf);
+
+    if (!error)
+        file->offset += size;
+
+    return error;
 }

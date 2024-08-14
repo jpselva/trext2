@@ -23,7 +23,12 @@ typedef enum {
     EXT2_DISK_FULL,
 } ext2_error_t;
 
-// ext2 disk structures
+////////////////////////////
+/// ext2 disk structures ///
+////////////////////////////
+
+// these are the data structures that are specified by ext2 and kept inside 
+// the disk
 
 typedef struct {
     uint32_t inodes_count;
@@ -92,7 +97,11 @@ typedef struct {
     uint8_t file_type;
 } ext2_directory_entry_t;
 
-// t-rext2 user structures
+///////////////////////////////
+/// t-rext2 data structures ///
+///////////////////////////////
+
+// these are the data structures that users of t-rext2 interact with
 
 // configuration used to mount a filesystem
 typedef struct {
@@ -115,7 +124,8 @@ typedef struct {
     int (*write)(uint32_t start, uint32_t size, const void* buffer, void* context);
 
     uint32_t block_size;
-    uint32_t block_group_count;
+
+    uint32_t block_group_count; // total number of block groups
 
     void* context;
 
@@ -127,11 +137,16 @@ typedef struct {
     uint32_t offset;
 } ext2_file_t;
 
+///////////////////////////////
+/// t-rext2 functions       ///
+///////////////////////////////
+
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
 ext2_error_t ext2_file_open(ext2_t* ext2, const char* path, ext2_file_t* file);
 ext2_error_t ext2_file_read(ext2_t* ext2, ext2_file_t* file, uint32_t size, void* buf);
 ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset);
 uint32_t ext2_file_tell(ext2_t* ext2, const ext2_file_t* file);
+ext2_error_t ext2_file_write(ext2_t* ext2, ext2_file_t* file, uint32_t size, const void* buf);
 
 // REMOVE THESE LATER
 ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);

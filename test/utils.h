@@ -22,4 +22,4 @@ void exec_cmd_fail(const char* fmt, ...);
  * Disk Emulation using a file       *
  *************************************/
 int readblock(uint32_t start, uint32_t size, void* buffer, void* context); 
-
+int writeblock(uint32_t start, uint32_t size, const void* buffer, void* context);
