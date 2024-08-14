@@ -1,16 +1,35 @@
 #include "utils.h"
 
 int readblock(uint32_t start, uint32_t size, void* buffer, void* context) {
-    FILE* diskfile = fopen((char*) context, "rw");
+    FILE* diskfile = fopen((char*) context, "r+");
 
     if (diskfile == NULL)
         return -1;
 
     // set read/write position to start of block
-    fseek(diskfile, start, SEEK_SET);
+    if (fseek(diskfile, start, SEEK_SET))
+        return -1;
 
     // read 1 string of 'size' elements into buffer
     size_t items_read = fread(buffer, size, 1, diskfile);
+
+    fclose(diskfile);
+
+    return (items_read < 1) ? -1 : 0;
+}
+
+int writeblock(uint32_t start, uint32_t size, const void* buffer, void* context) {
+    FILE* diskfile = fopen((char*) context, "r+");
+
+    if (diskfile == NULL)
+        return -1;
+
+    // set read/write position to start of block
+    if (fseek(diskfile, start, SEEK_SET))
+        return -1;
+
+    // write 1 string of 'size' elements into buffer
+    size_t items_read = fwrite(buffer, size, 1, diskfile);
 
     fclose(diskfile);
 
