@@ -53,6 +53,9 @@ int main(void) {
     error = ext2_dir_read(&ext2, &dir, &entry);
     test("last entry has empty name", strcmp(entry.name, "") == 0);
 
+    error = ext2_dir_read(&ext2, &dir, &entry);
+    test("last entry has empty name (again)", strcmp(entry.name, "") == 0);
+
     error = ext2_dir_seek(&ext2, &dir, offset);
     test("seek ok", error == 0);
 
