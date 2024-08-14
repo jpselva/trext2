@@ -76,4 +76,13 @@ int main(void) {
     error = ext2_file_write(&ext2, &file, strlen(buf), buf);
     
     test("write ok", error == 0);
+
+    ext2_file_seek(&ext2, &file, pad);
+
+    char output_buf[100];
+    error = ext2_file_read(&ext2, &file, strlen(buf), output_buf);
+    output_buf[strlen(buf)] = '\0';
+
+    test("read ok", error == 0);
+    test("written data is correct", strcmp(output_buf, buf) == 0);
 }

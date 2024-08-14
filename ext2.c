@@ -347,7 +347,7 @@ ext2_error_t add_block(ext2_t* ext2, uint32_t inode, uint32_t* block) {
 
     for (int i = 1; i <= ind_info.indirection; i++) {
         bool is_blk_missing = true;
-        for (int j = i; j > 0; j--)
+        for (int j = i; j <= ind_info.indirection; j++)
             is_blk_missing = is_blk_missing && (ind_info.indexes[j] == 0);
 
         if (is_blk_missing) {
@@ -365,7 +365,12 @@ ext2_error_t add_block(ext2_t* ext2, uint32_t inode, uint32_t* block) {
             ind_info.indexes[i] * sizeof(uint32_t);
     }
 
-    *block = next_block;
+    err = get_new_block(ext2, group, block);
+
+    if (err)
+        return err;
+
+    ext2->write(block_ptr, 4, block, ext2->context);
     return 0;
 }
 
@@ -385,7 +390,8 @@ ext2_error_t  write_data(ext2_t* ext2, uint32_t inode, uint32_t offset,
     uint32_t allocated_size = CEIL(inode_struct.size, ext2->block_size) * 
                                   ext2->block_size;
 
-    while (size > 0) {
+    uint32_t sz = size;
+    while (sz > 0) {
         uint32_t datablock;
 
         if (offset >= allocated_size) {
@@ -399,7 +405,7 @@ ext2_error_t  write_data(ext2_t* ext2, uint32_t inode, uint32_t offset,
 
         uint32_t block_offset = offset % ext2->block_size;
         uint32_t remaining = ext2->block_size - block_offset;
-        uint32_t bytes_to_write = (remaining < size) ? remaining : size;
+        uint32_t bytes_to_write = (remaining < sz) ? remaining : sz;
 
         // TODO: write 0 to inode block number if block is all zeros
         error = ext2->write(datablock * ext2->block_size + block_offset,
@@ -410,8 +416,13 @@ ext2_error_t  write_data(ext2_t* ext2, uint32_t inode, uint32_t offset,
 
         buffer = (uint8_t*)buffer + bytes_to_write;
         offset += bytes_to_write;
-        size -= bytes_to_write;
+        sz -= bytes_to_write;
     }
+
+    // re-read inode because it might have changed
+    error = read_inode(ext2, inode, &inode_struct);
+    inode_struct.size += size;
+    write_inode(ext2, inode, &inode_struct);
 
     return 0;
 }
