@@ -85,4 +85,6 @@ int main(void) {
 
     test("read ok", error == 0);
     test("written data is correct", strcmp(output_buf, buf) == 0);
+
+    exec_cmd_fail("debugfs -w %s -R \"dump foo/hello /tmp/bye2\"", DISKIMG_FILE);
 }

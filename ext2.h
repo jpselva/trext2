@@ -24,6 +24,7 @@ typedef enum {
     EXT2_ERR_DISK_FULL,
     EXT2_ERR_NOT_A_FILE,
     EXT2_ERR_NOT_A_DIR,
+    EXT2_ERR_INODES_DEPLETED,
 } ext2_error_t;
 
 ////////////////////////////
@@ -181,7 +182,7 @@ typedef struct {
 typedef struct {
     uint32_t inode;
     char name[EXT2_MAX_FILE_NAME + 1];
-} ext2_dir_entry_t;
+} ext2_dir_record_t;
 
 ///////////////////////////////
 /// t-rext2 functions       ///
@@ -194,7 +195,7 @@ ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset);
 uint32_t ext2_file_tell(ext2_t* ext2, const ext2_file_t* file);
 ext2_error_t ext2_file_write(ext2_t* ext2, ext2_file_t* file, uint32_t size, const void* buf);
 ext2_error_t ext2_dir_open(ext2_t* ext2, const char* path, ext2_dir_t* dir);
-ext2_error_t ext2_dir_read(ext2_t* ext2, ext2_dir_t* dir, ext2_dir_entry_t* entry);
+ext2_error_t ext2_dir_read(ext2_t* ext2, ext2_dir_t* dir, ext2_dir_record_t* entry);
 ext2_error_t ext2_dir_seek(ext2_t* ext2, ext2_dir_t* dir, uint32_t offset);
 uint32_t ext2_dir_tell(ext2_t* ext2, const ext2_dir_t* dir);
 
