@@ -630,7 +630,7 @@ ext2_error_t get_last_dir_entry_offset(ext2_t* ext2, uint32_t dir_inode,
 
     // obtain the last directory entry
     ext2_directory_entry_t last_entry;
-    uint32_t off, last_entry_off;
+    uint32_t off, last_entry_off = -1;
 
     for (off = 0; off < inode_struct.size; off += last_entry.rec_len) {
         err = read_dir_entry(ext2, off, dir_inode, &last_entry);
@@ -658,17 +658,26 @@ ext2_error_t add_dir_entry(ext2_t* ext2, uint32_t dir_inode,
 
     // get last entry in the directory
     uint32_t last_entry_offset;
+    ext2_directory_entry_t last_entry;
     err = get_last_dir_entry_offset(ext2, dir_inode, &last_entry_offset);
     if (err)
         return err;
 
-    ext2_directory_entry_t last_entry;
-    err = read_dir_entry(ext2, last_entry_offset, dir_inode, &last_entry);
-    if (err)
-        return err;
+    bool is_first_entry = (last_entry_offset == -1);
 
-    // get address of new entry and align it
-    uint32_t new_entry_offset = last_entry_offset + get_dir_entry_size(&last_entry);
+    uint32_t new_entry_offset;
+
+    if (is_first_entry) {
+        new_entry_offset = 0;
+    } else {
+        err = read_dir_entry(ext2, last_entry_offset, dir_inode, &last_entry);
+        if (err)
+            return err;
+
+        new_entry_offset = last_entry_offset + get_dir_entry_size(&last_entry);
+    }
+
+    // align address
     new_entry_offset = CEIL(new_entry_offset, 4) * 4; // 4-byte aligned
 
     // make sure new entry won't span two blocks
@@ -679,17 +688,29 @@ ext2_error_t add_dir_entry(ext2_t* ext2, uint32_t dir_inode,
         // push everything to the next block
         new_entry_offset = ending_block * ext2->block_size;
 
+    // add padding if needed
+    if (!is_first_entry) {
+        int off = last_entry_offset + get_dir_entry_size(&last_entry);
+        char pad = '0';
+        while (off < new_entry_offset) {
+            write_data(ext2, dir_inode, off, 1, &pad);
+            off++;
+        }
+    }
+
     // write next entry
     entry->rec_len = (ending_block + 1) * ext2->block_size - new_entry_offset;
     write_data(ext2, dir_inode, new_entry_offset, get_dir_entry_size(entry), 
             entry);
 
-    // update previous last entry
-    last_entry.rec_len = new_entry_offset - last_entry_offset;
-    err = write_data(ext2, dir_inode, last_entry_offset, 
-            get_dir_entry_size(&last_entry), &last_entry);
-    if (err)
-        return err;
+    if (!is_first_entry) {
+        // update previous last entry
+        last_entry.rec_len = new_entry_offset - last_entry_offset;
+        err = write_data(ext2, dir_inode, last_entry_offset, 
+                get_dir_entry_size(&last_entry), &last_entry);
+        if (err)
+            return err;
+    }
 
     return 0;
 }
@@ -883,6 +904,46 @@ ext2_error_t ext2_dir_open(ext2_t* ext2, const char* path, ext2_dir_t* dir) {
 
     dir->inode = inode;
     dir->offset = 0;
+    return 0;
+}
+
+ext2_error_t ext2_mkdir(ext2_t* ext2, const char* path) {
+    uint32_t inode;
+    ext2_inode_t inode_struct;
+    ext2_error_t error = create_and_link_inode(ext2, path, &inode);
+    if (error)
+        return error;
+
+    error = read_inode(ext2, inode, &inode_struct);
+    if (error)
+        return error;
+
+    set_inode_file_fmt(&inode_struct, EXT2_FMT_DIR);
+    error = write_inode(ext2, inode, &inode_struct);
+    if (error)
+        return error;
+
+    uint32_t parent_inode;
+    locate_parent_inode(ext2, path, &parent_inode);
+
+    ext2_directory_entry_t dot;
+    error = create_dir_entry(ext2, inode, ".", &dot);
+    if (error)
+        return error;
+
+    ext2_directory_entry_t dotdot;
+    error = create_dir_entry(ext2, parent_inode, "..", &dotdot);
+    if (error)
+        return error;
+
+    error = add_dir_entry(ext2, inode, &dot);
+    if (error)
+        return error;
+
+    error = add_dir_entry(ext2, inode, &dotdot);
+    if (error)
+        return error;
+
     return 0;
 }
 

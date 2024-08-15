@@ -198,6 +198,7 @@ ext2_error_t ext2_dir_open(ext2_t* ext2, const char* path, ext2_dir_t* dir);
 ext2_error_t ext2_dir_read(ext2_t* ext2, ext2_dir_t* dir, ext2_dir_record_t* entry);
 ext2_error_t ext2_dir_seek(ext2_t* ext2, ext2_dir_t* dir, uint32_t offset);
 uint32_t ext2_dir_tell(ext2_t* ext2, const ext2_dir_t* dir);
+ext2_error_t ext2_mkdir(ext2_t* ext2, const char* path);
 
 // REMOVE THESE LATER
 ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);
