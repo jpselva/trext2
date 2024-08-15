@@ -673,7 +673,8 @@ ext2_error_t add_dir_entry(ext2_t* ext2, uint32_t dir_inode,
 
     // make sure new entry won't span two blocks
     uint32_t starting_block = new_entry_offset / ext2->block_size;
-    uint32_t ending_block = (new_entry_offset + entry->rec_len) / ext2->block_size;
+    uint32_t entry_size = get_dir_entry_size(entry);
+    uint32_t ending_block = (new_entry_offset + entry_size) / ext2->block_size;
     if (starting_block < ending_block)
         // push everything to the next block
         new_entry_offset = ending_block * ext2->block_size;
@@ -793,14 +794,15 @@ ext2_error_t ext2_file_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
 
     if (error == EXT2_ERR_FILE_NOT_FOUND) {
         error = create_and_link_inode(ext2, path, &inode);
-
         if (error)
             return error;
 
         error = read_inode(ext2, inode, &inode_struct);
+        if (error)
+            return error;
+
         set_inode_file_fmt(&inode_struct, EXT2_FMT_REG);
         error = write_inode(ext2, inode, &inode_struct);
-
         if (error)
             return error;
     }
