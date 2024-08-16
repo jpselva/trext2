@@ -545,7 +545,6 @@ ext2_error_t get_free_inode_in_group(ext2_t* ext2, uint32_t group, uint32_t* ino
         return error;
 
     uint32_t bitmap_addr = bgd.inode_bitmap * ext2->block_size;
-    uint32_t inode_table_addr = bgd.inode_table * ext2->block_size;
     uint32_t first_inode = group * ext2->superblk.inodes_per_group + 1;
     *inode = 0; // no free inode found yet
 
@@ -611,8 +610,6 @@ ext2_error_t create_dir_entry(ext2_t* ext2, uint32_t inode, const char* name,
     uint32_t namelen = strlen(name);
     if (namelen > EXT2_MAX_FILE_NAME)
         return EXT2_ERR_FILENAME_TOO_BIG;
-
-    uint32_t headersz = ((uint8_t*)&entry->name - (uint8_t*)entry);
 
     entry->inode = inode;
     entry->name_len = namelen;

@@ -1,5 +1,7 @@
 #include "utils.h"
 
+ext2_error_t parse_filename(const char* path, char* filename, uint32_t* chars_read);
+
 int main() {
     testsuite("test parsepath");
 

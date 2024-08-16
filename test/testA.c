@@ -56,5 +56,9 @@ int main(void) {
     char* buf = "hi there";
     ext2_file_write(&ext2, &file, strlen(buf), buf);
 
+    err = ext2_mkdir(&ext2, "/bar");
+
+    test("toplevel mkdir ok", err == 0);
+
     return 0;
 }

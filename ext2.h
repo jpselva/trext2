@@ -27,9 +27,7 @@ typedef enum {
     EXT2_ERR_INODES_DEPLETED,
 } ext2_error_t;
 
-////////////////////////////
-/// ext2 disk structures ///
-////////////////////////////
+// ext2 disk structures //
 
 // these are the data structures/types that are specified by ext2 and kept 
 // inside the disk
@@ -128,9 +126,7 @@ typedef struct {
     char name[EXT2_MAX_FILE_NAME + 1];
 } ext2_directory_entry_t;
 
-///////////////////////////////
-/// t-rext2 data structures ///
-///////////////////////////////
+// t-rext2 data structures //
 
 // these are the data structures that users of t-rext2 interact with
 
@@ -188,9 +184,7 @@ typedef struct {
     char name[EXT2_MAX_FILE_NAME + 1];
 } ext2_dir_record_t;
 
-///////////////////////////////
-/// t-rext2 functions       ///
-///////////////////////////////
+// t-rext2 functions       //
 
 /**
  * Mounts a filesystem based on a configuration
@@ -305,9 +299,4 @@ uint32_t ext2_dir_tell(ext2_t* ext2, const ext2_dir_t* dir);
  */
 ext2_error_t ext2_mkdir(ext2_t* ext2, const char* path);
 
-// REMOVE THESE LATER
-ext2_error_t read_inode(ext2_t* ext2, uint32_t inode_number, ext2_inode_t* inode);
-ext2_error_t read_data(ext2_t* ext2, uint32_t inode, uint32_t offset, 
-        uint32_t size, void* buffer);
-ext2_error_t parse_filename(const char* path, char* filename, uint32_t* chars_read);
 #endif

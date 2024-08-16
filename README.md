@@ -2,6 +2,10 @@
 
 Implementação simplificada do sistema de arquivos ext2
 
+## Documentação
+
+A documentação do projeto está dentro da pasta `doc/`
+
 ## Testes
 
 Para rodar os testes automatizados, é necessário que as executáveis `debugfs` e `mkfs.ext2` estejam instaladas e sejam acessíveis pelo usuário (ou seja, sem usar sudo). Para executar os testes, rode:

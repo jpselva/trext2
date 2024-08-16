@@ -2,13 +2,19 @@ TEST_SOURCES := $(wildcard test/test*.c)
 TEST_EXECUTABLES := $(TEST_SOURCES:.c=)
 
 CC := gcc
-TESTFLAGS := -Wall -g -O0 -Wconversion
-CFLAGS := -Wall -g -O2 -Wconversion
+TESTFLAGS := -Wall -g -O0
+CFLAGS := -Wall -g -O0
 
 all: $(TEST_EXECUTABLES)
 
-test/%: test/%.c test/utils.c test/utils.h ext2.c ext2.h
-	$(CC) $(TESTFLAGS) -o $@ $< test/utils.c ext2.c
+ext2.o: ext2.c
+	$(CC) $(CFLAGS) -c $@ $<
+
+utils.o: test/utils.c
+	$(CC) $(CFLAGS) -c $@ $<
+
+test/%: test/%.c utils.o ext2.o
+	$(CC) $(TESTFLAGS) -o $@ $< utils.o ext2.o
 
 run-tests: $(TEST_EXECUTABLES)
 	for test in $(TEST_EXECUTABLES) ; do \
@@ -18,4 +24,5 @@ run-tests: $(TEST_EXECUTABLES)
 # Clean up the build artifacts
 clean:
 	rm -f $(TEST_EXECUTABLES)
-
+	rm ext2.o
+	rm utils.o
