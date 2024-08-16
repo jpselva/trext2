@@ -32,7 +32,7 @@ int main(void) {
 
     test("opens ok", error == 0);
 
-    ext2_dir_entry_t entry;
+    ext2_dir_record_t entry;
 
     error = ext2_dir_read(&ext2, &dir, &entry);
 

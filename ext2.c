@@ -1,5 +1,6 @@
 #include "ext2.h"
 #define CEIL(x, y) ((x)/(y) + (((x) % (y) == 0) ? 0 : 1))
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
 
 // blk_indirection_info
 //
@@ -231,11 +232,20 @@ ext2_error_t parse_filename(const char* path, char* filename, uint32_t* chars_re
 
 ext2_error_t read_dir_entry(ext2_t* ext2, uint32_t offset, 
         uint32_t dir_inode, ext2_directory_entry_t* entry) {
+    ext2_inode_t inode_struct;
+
+    ext2_error_t error = read_inode(ext2, dir_inode, &inode_struct);
+    if (error)
+        return error;
+
+    if (GET_FILE_FMT(inode_struct.mode) != EXT2_FMT_DIR)
+        return EXT2_ERR_NOT_A_DIR;
+
     // total size of the fields of the dir entry struct that precede the name
     // of the file
     uint32_t headersz = (uint8_t*)&entry->name - (uint8_t*)entry;
 
-    ext2_error_t error = read_data(ext2, dir_inode, offset, headersz, entry);
+    error = read_data(ext2, dir_inode, offset, headersz, entry);
     if (error)
         return error;
 
@@ -253,20 +263,27 @@ ext2_error_t locate_inode_in_dir(ext2_t* ext2, uint32_t parent_inode,
     ext2_directory_entry_t entry;
     uint32_t offset = 0;
 
+    ext2_inode_t inode_struct;
+    ext2_error_t error = read_inode(ext2, parent_inode, &inode_struct);
+
+    if (error)
+        return error;
+
     do {
-        ext2_error_t error = read_dir_entry(ext2, offset, parent_inode, &entry);
+        error = read_dir_entry(ext2, offset, parent_inode, &entry);
 
         if (error)
             return error;
 
-        if (entry.inode == 0)
-            return EXT2_ERR_FILE_NOT_FOUND;
+        if (strcmp(entry.name, name) == 0) {
+            *inode = entry.inode;
+            return 0;
+        }
 
         offset += entry.rec_len;
-    } while (strcmp(entry.name, name) != 0);
+    } while (offset < inode_struct.size);
 
-    *inode = entry.inode;
-    return 0;
+    return EXT2_ERR_FILE_NOT_FOUND;
 }
 
 // Reserves a block inside a group. Sets 'block' to the first free block inside 
@@ -294,7 +311,7 @@ ext2_error_t get_free_block_in_group(ext2_t* ext2, uint32_t group,
 
     for (int i = 0; i < blocks_per_group/8; i++) {
         uint8_t bitmap_byte;
-        error = ext2->read(bitmap_addr + i*8, 1, &bitmap_byte, ext2->context);
+        error = ext2->read(bitmap_addr + i, 1, &bitmap_byte, ext2->context);
 
         if (error)
             return error;
@@ -312,13 +329,15 @@ ext2_error_t get_free_block_in_group(ext2_t* ext2, uint32_t group,
             *block = i * 8 + shift + data_blocks_start;
 
             bitmap_byte |= (1 << shift);
-            ext2->write(bitmap_addr + i*8, 1, &bitmap_byte, ext2->context);
+            ext2->write(bitmap_addr + i, 1, &bitmap_byte, ext2->context);
 
             bgd.free_blocks_count -= 1;
             write_bgd(ext2, group, &bgd);
 
             ext2->superblk.free_blocks_count -= 1;
             write_superblock(ext2, &ext2->superblk);
+
+            break;
         }
     }
 
@@ -411,19 +430,20 @@ ext2_error_t  write_data(ext2_t* ext2, uint32_t inode, uint32_t offset,
                                   ext2->block_size;
 
     uint32_t sz = size;
+    uint32_t off = offset;
     while (sz > 0) {
         uint32_t datablock;
 
-        if (offset >= allocated_size) {
+        if (off >= allocated_size) {
             error = add_block(ext2, inode, &datablock);
         } else {
-            error = block_map(ext2, inode, offset, &datablock);  
+            error = block_map(ext2, inode, off, &datablock);  
         }
 
         if (error)
             return error;
 
-        uint32_t block_offset = offset % ext2->block_size;
+        uint32_t block_offset = off % ext2->block_size;
         uint32_t remaining = ext2->block_size - block_offset;
         uint32_t bytes_to_write = (remaining < sz) ? remaining : sz;
 
@@ -435,13 +455,13 @@ ext2_error_t  write_data(ext2_t* ext2, uint32_t inode, uint32_t offset,
             return error;
 
         buffer = (uint8_t*)buffer + bytes_to_write;
-        offset += bytes_to_write;
+        off += bytes_to_write;
         sz -= bytes_to_write;
     }
 
     // re-read inode because it might have changed
     error = read_inode(ext2, inode, &inode_struct);
-    inode_struct.size += size;
+    inode_struct.size = MAX(inode_struct.size, offset + size);
     write_inode(ext2, inode, &inode_struct);
 
     return 0;
@@ -465,19 +485,310 @@ ext2_error_t locate_inode(ext2_t* ext2, const char* path, uint32_t* inode) {
             if (error)
                 return error;
 
-            uint32_t next_ino;
-            error = locate_inode_in_dir(ext2, ino, current_name, &next_ino);
+            error = locate_inode_in_dir(ext2, ino, current_name, &ino);
 
             if (error)
                 return error;
 
-            ino = next_ino;
             path += chars_read;
         }
     }
 
     *inode = ino;
+
     return 0;
+}
+
+ext2_error_t locate_parent_inode(ext2_t* ext2, const char* path, uint32_t* parent) {
+    uint32_t ino = EXT2_ROOT_INODE;
+    uint32_t previous_ino = ino;
+    char current_name[EXT2_MAX_FILE_NAME + 1];
+
+    uint32_t chars_read;
+    ext2_error_t error;
+
+    if (path[0] != '/') {
+        return EXT2_ERR_BAD_PATH;
+    } else if (path[1] != '\0') {
+        while (*path == '/') {
+            path++;
+
+            error = parse_filename(path, current_name, &chars_read);
+
+            if (error)
+                return error;
+
+            path += chars_read;
+
+            previous_ino = ino;
+
+            if (*path == '\0')
+                break;
+
+            error = locate_inode_in_dir(ext2, ino, current_name, &ino);
+
+            if (error)
+                return error;
+
+        }
+    }
+
+    *parent = previous_ino;
+    return 0;
+}
+
+ext2_error_t get_free_inode_in_group(ext2_t* ext2, uint32_t group, uint32_t* inode) {
+    ext2_bgd_t bgd;
+    ext2_error_t error = read_bgd(ext2, group, &bgd);
+
+    if (error)
+        return error;
+
+    uint32_t bitmap_addr = bgd.inode_bitmap * ext2->block_size;
+    uint32_t inode_table_addr = bgd.inode_table * ext2->block_size;
+    uint32_t first_inode = group * ext2->superblk.inodes_per_group + 1;
+    *inode = 0; // no free inode found yet
+
+    if (bgd.free_inodes_count == 0)
+        return 0;
+
+    for (int i = 0; i < ext2->superblk.inodes_per_group/8; i++) {
+        uint8_t bitmap_byte;
+        error = ext2->read(bitmap_addr + i, 1, &bitmap_byte, ext2->context);
+
+        if (error)
+            return error;
+
+        bool found_inode = false;
+        int shift;
+
+        for (shift = 0; shift < 8; shift++) {
+            found_inode = ((bitmap_byte & (1 << shift)) == 0);
+            if (found_inode)
+                break;
+        }
+
+        if (found_inode) {
+            *inode = i * 8 + shift + first_inode;
+
+            bitmap_byte |= (1 << shift);
+            ext2->write(bitmap_addr + i, 1, &bitmap_byte, ext2->context);
+
+            bgd.free_inodes_count -= 1;
+            write_bgd(ext2, group, &bgd);
+
+            ext2->superblk.free_inodes_count -= 1;
+            write_superblock(ext2, &ext2->superblk);
+
+            break;
+        }
+    }
+
+    return 0;
+}
+
+ext2_error_t get_free_inode(ext2_t* ext2, uint32_t preferred_group, 
+        uint32_t* inode) {
+    int group = preferred_group;
+
+    do {
+        ext2_error_t err = get_free_inode_in_group(ext2, group, inode);
+
+        if (err)
+            return err;
+
+        if (*inode != 0)
+            return 0;
+
+        group = (group + 1) % ext2->block_group_count;
+    } while (group != preferred_group);
+
+    return EXT2_ERR_INODES_DEPLETED;
+}
+
+ext2_error_t create_dir_entry(ext2_t* ext2, uint32_t inode, const char* name,
+        ext2_directory_entry_t* entry) {
+    uint32_t namelen = strlen(name);
+    if (namelen > EXT2_MAX_FILE_NAME)
+        return EXT2_ERR_FILENAME_TOO_BIG;
+
+    uint32_t headersz = ((uint8_t*)&entry->name - (uint8_t*)entry);
+
+    entry->inode = inode;
+    entry->name_len = namelen;
+    entry->file_type = 0;
+    strcpy(entry->name, name);
+
+    return 0;
+}
+
+ext2_error_t get_last_dir_entry_offset(ext2_t* ext2, uint32_t dir_inode, 
+        uint32_t* offset) {
+
+    ext2_inode_t inode_struct;
+    ext2_error_t err = read_inode(ext2, dir_inode, &inode_struct);
+    if (err)
+        return err;
+
+    // obtain the last directory entry
+    ext2_directory_entry_t last_entry;
+    uint32_t off, last_entry_off = -1;
+
+    for (off = 0; off < inode_struct.size; off += last_entry.rec_len) {
+        err = read_dir_entry(ext2, off, dir_inode, &last_entry);
+        if (err)
+            return err;
+        last_entry_off = off;
+    }
+
+    *offset = last_entry_off;
+    return 0;
+}
+
+uint32_t get_dir_entry_size(const ext2_directory_entry_t* entry) {
+    uint32_t headersz = ((uint8_t*)&entry->name - (uint8_t*)entry);
+    return headersz + entry->name_len;
+}
+
+ext2_error_t add_dir_entry(ext2_t* ext2, uint32_t dir_inode, 
+        ext2_directory_entry_t* entry) {
+
+    ext2_inode_t inode_struct;
+    ext2_error_t err = read_inode(ext2, dir_inode, &inode_struct);
+    if (err)
+        return err;
+
+    // get last entry in the directory
+    uint32_t last_entry_offset;
+    ext2_directory_entry_t last_entry;
+    err = get_last_dir_entry_offset(ext2, dir_inode, &last_entry_offset);
+    if (err)
+        return err;
+
+    bool is_first_entry = (last_entry_offset == -1);
+
+    uint32_t new_entry_offset;
+
+    if (is_first_entry) {
+        new_entry_offset = 0;
+    } else {
+        err = read_dir_entry(ext2, last_entry_offset, dir_inode, &last_entry);
+        if (err)
+            return err;
+
+        new_entry_offset = last_entry_offset + get_dir_entry_size(&last_entry);
+    }
+
+    // align address
+    new_entry_offset = CEIL(new_entry_offset, 4) * 4; // 4-byte aligned
+
+    // make sure new entry won't span two blocks
+    uint32_t starting_block = new_entry_offset / ext2->block_size;
+    uint32_t entry_size = get_dir_entry_size(entry);
+    uint32_t ending_block = (new_entry_offset + entry_size) / ext2->block_size;
+    if (starting_block < ending_block)
+        // push everything to the next block
+        new_entry_offset = ending_block * ext2->block_size;
+
+    // add padding if needed
+    if (!is_first_entry) {
+        int off = last_entry_offset + get_dir_entry_size(&last_entry);
+        char pad = '0';
+        while (off < new_entry_offset) {
+            write_data(ext2, dir_inode, off, 1, &pad);
+            off++;
+        }
+    }
+
+    // write next entry
+    entry->rec_len = (ending_block + 1) * ext2->block_size - new_entry_offset;
+    write_data(ext2, dir_inode, new_entry_offset, get_dir_entry_size(entry), 
+            entry);
+
+    if (!is_first_entry) {
+        // update previous last entry
+        last_entry.rec_len = new_entry_offset - last_entry_offset;
+        err = write_data(ext2, dir_inode, last_entry_offset, 
+                get_dir_entry_size(&last_entry), &last_entry);
+        if (err)
+            return err;
+    }
+
+    return 0;
+}
+
+ext2_error_t link(ext2_t* ext2, uint32_t dir_inode, uint32_t inode, 
+        const char* name) {
+
+    ext2_directory_entry_t entry;
+    ext2_error_t err = create_dir_entry(ext2, inode, name, &entry);
+    if (err)
+        return err;
+
+    err = add_dir_entry(ext2, dir_inode, &entry);
+    if (err)
+        return err;
+
+    ext2_inode_t inode_struct;
+    err = read_inode(ext2, inode, &inode_struct);
+    if (err)
+        return err;
+    inode_struct.links_count += 1;
+    err = write_inode(ext2, inode, &inode_struct);
+    if (err)
+        return err;
+
+    return 0;
+}
+
+// extracts the filename from a full path
+ext2_error_t get_file_name(const char* path, char* name) {
+    const char* lastsep = path;
+    while (*path != '\0') {
+        if (*path == '/')
+            lastsep = path + 1;
+        path++;
+    }
+    
+    if (strlen(lastsep) > EXT2_MAX_FILE_NAME)
+        return EXT2_ERR_FILENAME_TOO_BIG;
+
+    strcpy(name, lastsep);
+
+    return 0;
+}
+
+// creates a new inode and links the path to it. Stores the new inode number in
+// the 'ino' pointer
+ext2_error_t create_and_link_inode(ext2_t* ext2, const char* path, uint32_t* ino) {
+    // locate parent dir inode
+    uint32_t dir_inode;
+    ext2_error_t err = locate_parent_inode(ext2, path, &dir_inode);
+    if (err)
+        return err;
+
+    // allocate a new inode for the file
+    uint32_t inode;
+    err = get_free_inode(ext2, get_inode_group(ext2, dir_inode), &inode);
+    if (err)
+        return err;
+
+    // link inode to the desired file
+    char filename[EXT2_MAX_FILE_NAME + 1];
+    err = get_file_name(path, filename);
+    if (err)
+        return err;
+    err = link(ext2, dir_inode, inode, filename);
+    if (err)
+        return err;
+
+    *ino = inode;
+    return 0;
+}
+
+void set_inode_file_fmt(ext2_inode_t* inode_struct, ext2_file_format_t fmt) {
+    inode_struct->mode &= 0x0FFF;
+    inode_struct->mode |= fmt;
 }
 
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
@@ -489,7 +800,7 @@ ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
 
     int superblk_error = read_superblock(ext2, &superblk);
 
-    if (superblk_error < 0)
+    if (superblk_error)
         return superblk_error;
     
     ext2->superblk = superblk;
@@ -505,15 +816,30 @@ ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg) {
 }
 
 ext2_error_t ext2_file_open(ext2_t* ext2, const char* path, ext2_file_t* file) {
-    uint32_t inode = EXT2_ROOT_INODE;
+    uint32_t inode;
     ext2_error_t error;
+    ext2_inode_t inode_struct;
 
     error = locate_inode(ext2, path, &inode);
+
+    if (error == EXT2_ERR_FILE_NOT_FOUND) {
+        error = create_and_link_inode(ext2, path, &inode);
+        if (error)
+            return error;
+
+        error = read_inode(ext2, inode, &inode_struct);
+        if (error)
+            return error;
+
+        set_inode_file_fmt(&inode_struct, EXT2_FMT_REG);
+        error = write_inode(ext2, inode, &inode_struct);
+        if (error)
+            return error;
+    }
 
     if (error)
         return error;
 
-    ext2_inode_t inode_struct;
     error = read_inode(ext2, inode, &inode_struct);
 
     if (error)
@@ -567,7 +893,7 @@ ext2_error_t ext2_file_write(ext2_t* ext2, ext2_file_t* file,
 }
 
 ext2_error_t ext2_dir_open(ext2_t* ext2, const char* path, ext2_dir_t* dir) {
-    uint32_t inode = EXT2_ROOT_INODE;
+    uint32_t inode;
     ext2_error_t error;
 
     error = locate_inode(ext2, path, &inode);
@@ -581,7 +907,7 @@ ext2_error_t ext2_dir_open(ext2_t* ext2, const char* path, ext2_dir_t* dir) {
     if (error)
         return error;
 
-    // ensure inode actually refers to a file
+    // ensure inode actually refers to a dir
     if (GET_FILE_FMT(inode_struct.mode) != EXT2_FMT_DIR)
         return EXT2_ERR_NOT_A_DIR;
 
@@ -590,7 +916,47 @@ ext2_error_t ext2_dir_open(ext2_t* ext2, const char* path, ext2_dir_t* dir) {
     return 0;
 }
 
-ext2_error_t ext2_dir_read(ext2_t* ext2, ext2_dir_t* dir, ext2_dir_entry_t* entry) {
+ext2_error_t ext2_mkdir(ext2_t* ext2, const char* path) {
+    uint32_t inode;
+    ext2_inode_t inode_struct;
+    ext2_error_t error = create_and_link_inode(ext2, path, &inode);
+    if (error)
+        return error;
+
+    error = read_inode(ext2, inode, &inode_struct);
+    if (error)
+        return error;
+
+    set_inode_file_fmt(&inode_struct, EXT2_FMT_DIR);
+    error = write_inode(ext2, inode, &inode_struct);
+    if (error)
+        return error;
+
+    uint32_t parent_inode;
+    locate_parent_inode(ext2, path, &parent_inode);
+
+    error = link(ext2, inode, inode, ".");
+    if (error)
+        return error;
+
+    error = link(ext2, inode, parent_inode, "..");
+    if (error)
+        return error;
+
+    uint32_t group = get_inode_group(ext2, parent_inode);
+    ext2_bgd_t bgd;
+    error = read_bgd(ext2, group, &bgd);
+    if (error)
+        return error;
+    bgd.used_dirs_count += 1;
+    error = write_bgd(ext2, group, &bgd);
+    if (error)
+        return error;
+
+    return 0;
+}
+
+ext2_error_t ext2_dir_read(ext2_t* ext2, ext2_dir_t* dir, ext2_dir_record_t* entry) {
     ext2_inode_t inode_struct;
     ext2_error_t error = read_inode(ext2, dir->inode, &inode_struct);
     if (error)
