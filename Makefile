@@ -21,8 +21,12 @@ run-tests: $(TEST_EXECUTABLES)
 		./$$test ; \
 	done
 
+doc/doc.pdf: doc/doc.md
+	pandoc $< -o $@ --pdf-engine=pdflatex -V geometry:margin=1in
+
 # Clean up the build artifacts
 clean:
 	rm -f $(TEST_EXECUTABLES)
 	rm ext2.o
 	rm utils.o
+	rm doc/doc.pdf

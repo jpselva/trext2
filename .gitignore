@@ -10,5 +10,7 @@
 !test/*.h
 !Makefile
 !README.md
+!doc
+!doc/*
 
 **.img

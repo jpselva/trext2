@@ -13,18 +13,18 @@
 // trext2-specific errors. All user-defined errors should be negative (see the
 // ext2_config_t struct below)
 typedef enum {
-    EXT2_ERR_BIG_BLOCK = 1,
-    EXT2_ERR_INODE_NOT_FOUND,
-    EXT2_ERR_BGD_NOT_FOUND,
-    EXT2_ERR_FILENAME_TOO_BIG,
-    EXT2_ERR_DATA_OUT_OF_BOUNDS,
-    EXT2_ERR_FILE_NOT_FOUND,
-    EXT2_ERR_BAD_PATH,
-    EXT2_ERR_SEEK_OUT_OF_BOUNDS,
-    EXT2_ERR_DISK_FULL,
-    EXT2_ERR_NOT_A_FILE,
-    EXT2_ERR_NOT_A_DIR,
-    EXT2_ERR_INODES_DEPLETED,
+    EXT2_ERR_BIG_BLOCK = 1,       // filesystem block size is too big
+    EXT2_ERR_INODE_NOT_FOUND,     // attempted to find inode with invalid number
+    EXT2_ERR_BGD_NOT_FOUND,       // attempted to find group with invalid number
+    EXT2_ERR_FILENAME_TOO_BIG,    // filename is greater than EXT2_MAX_FILE_NAME
+    EXT2_ERR_DATA_OUT_OF_BOUNDS,  // reading/writing past the end of a file/dir
+    EXT2_ERR_FILE_NOT_FOUND,      // file does not exist
+    EXT2_ERR_BAD_PATH,            // invalid path (for example, using '\' instead of '/')
+    EXT2_ERR_SEEK_OUT_OF_BOUNDS,  // attempted to seek past the end of a file/dir
+    EXT2_ERR_DISK_FULL,           // disk is full. Cannot write more data.
+    EXT2_ERR_NOT_A_FILE,          // called ext2_file_open on a path that does not point to a file
+    EXT2_ERR_NOT_A_DIR,           // called ext2_dir_open on a path that does not point to a dir
+    EXT2_ERR_INODES_DEPLETED,     // no more inodes left. Cannot create more files or directories.
 } ext2_error_t;
 
 // ext2 disk structures //
@@ -179,9 +179,12 @@ typedef struct {
     uint32_t offset;
 } ext2_dir_t;
 
+/**
+ * Contains information about a file/directory
+ */
 typedef struct {
-    uint32_t inode;
-    char name[EXT2_MAX_FILE_NAME + 1];
+    uint32_t inode; // inode number of the file/dir (not useful for now)
+    char name[EXT2_MAX_FILE_NAME + 1]; // name of the file/dir
 } ext2_dir_record_t;
 
 // t-rext2 functions       //
@@ -249,9 +252,9 @@ ext2_error_t ext2_file_write(ext2_t* ext2, ext2_file_t* file, uint32_t size, con
 /**
  * Opens a directory
  *
- * @param ext2 pointer to the filesystem struct
- * @param path directory path
- * @param dir  pointer to directory handle
+ * @param ext2   pointer to the filesystem struct
+ * @param path   directory path
+ * @param dir    pointer to directory handle
  */
 ext2_error_t ext2_dir_open(ext2_t* ext2, const char* path, ext2_dir_t* dir);
 
@@ -260,9 +263,9 @@ ext2_error_t ext2_dir_open(ext2_t* ext2, const char* path, ext2_dir_t* dir);
  *
  * The next read to this directory will read the subsequent entry
  *
- * @param ext2  pointer to the filesystem struct
- * @param dir   pointer to directory handle
- * @param entry pointer to the entry struct
+ * @param ext2    pointer to the filesystem struct
+ * @param dir     pointer to directory handle
+ * @param entry   pointer to the entry struct
  */
 ext2_error_t ext2_dir_read(ext2_t* ext2, ext2_dir_t* dir, ext2_dir_record_t* entry);
 
@@ -275,11 +278,11 @@ ext2_error_t ext2_dir_read(ext2_t* ext2, ext2_dir_t* dir, ext2_dir_record_t* ent
  * a number that was previously returned by ext2_dir_tell for this directory.
  * This ensures all ext2_dir_read's happen in the proper boundaries.
  *
- * @param ext2   pointer to the filesystem struct
- * @param dir    pointer to directory handle
- * @param offset new read offset. This should ALWAYS be a value that was previously
- *               returned by ext2_dir_tell for this directory, otherwise it WILL
- *               break something.
+ * @param ext2     pointer to the filesystem struct
+ * @param dir      pointer to directory handle
+ * @param offset   new read offset. This should ALWAYS be a value that was previously
+ *                 returned by ext2_dir_tell for this directory, otherwise it WILL
+ *                 break something.
  */
 ext2_error_t ext2_dir_seek(ext2_t* ext2, ext2_dir_t* dir, uint32_t offset);
 
@@ -294,8 +297,8 @@ uint32_t ext2_dir_tell(ext2_t* ext2, const ext2_dir_t* dir);
 /**
  * Creates a directory
  *
- * @param ext2 pointer to the filesystem struct
- * @param path path of the directory
+ * @param ext2   pointer to the filesystem struct
+ * @param path   path of the directory
  */
 ext2_error_t ext2_mkdir(ext2_t* ext2, const char* path);
 
