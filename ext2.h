@@ -140,7 +140,9 @@ typedef enum {
     EXT2_FT_REGULAR_FILE,
 } ext2_file_type_t ;
 
-// configuration used to mount a filesystem
+/**
+ * configuration used to mount a filesystem
+ */
 typedef struct {
     // user defined read function. Negative return values will be passed back 
     // to the caller
@@ -155,7 +157,9 @@ typedef struct {
     void* context;
 } ext2_config_t;
 
-// holds state and information about a mounted filesystem
+/**
+ * holds state and information about a mounted filesystem
+ */
 typedef struct {
     int (*read)(uint32_t start, uint32_t size, void* buffer, void* context);
     int (*write)(uint32_t start, uint32_t size, const void* buffer, void* context);
@@ -188,16 +192,117 @@ typedef struct {
 /// t-rext2 functions       ///
 ///////////////////////////////
 
+/**
+ * Mounts a filesystem based on a configuration
+ */
 ext2_error_t ext2_mount(ext2_t* ext2, ext2_config_t* cfg);
+
+/**
+ * Opens a file, creating it if it doesn't exist
+ *
+ * @param ext2 pointer to the filesystem struct
+ * @param path the path to the file (always begins with a '/')
+ * @param file handle to the file
+ */
 ext2_error_t ext2_file_open(ext2_t* ext2, const char* path, ext2_file_t* file);
+
+/**
+ * Reads data from a file
+ *
+ * Read starts at the offset stored in the file handle and adds the amount of
+ * data read to it
+ *
+ * @param ext2 pointer to the filesystem struct
+ * @param file file handle pointer
+ * @param size amount of bytes to read
+ * @param buf  pointer to a buffer where the data will be stored
+ */
 ext2_error_t ext2_file_read(ext2_t* ext2, ext2_file_t* file, uint32_t size, void* buf);
+
+/**
+ * Changes a file read/write offset
+ *
+ * All reads and writes happen relative to an offset that's stored in the
+ * ext2_file_t struct. This function changes that offset.
+ *
+ * @param ext2   pointer to the filesystem struct
+ * @param file   file handle pointer
+ * @param offset the new offset (should not be greater than size of file)
+ */
 ext2_error_t ext2_file_seek(ext2_t* ext2, ext2_file_t* file, uint32_t offset);
+
+/**
+ * Returns the current read/write offset of the file
+ *
+ * @param ext2 pointer to the filesystem struct
+ * @param file file handle pointer
+ */
 uint32_t ext2_file_tell(ext2_t* ext2, const ext2_file_t* file);
+
+/**
+ * Writes data to a file
+ *
+ * Write starts at the offset stored in the file handle and adds the amount of
+ * data read to it
+ *
+ * @param ext2 pointer to the filesystem struct
+ * @param file file handle pointer
+ * @param size amount of bytes to write
+ * @param buf  pointer to the data that will be written
+ */
 ext2_error_t ext2_file_write(ext2_t* ext2, ext2_file_t* file, uint32_t size, const void* buf);
+
+/**
+ * Opens a directory
+ *
+ * @param ext2 pointer to the filesystem struct
+ * @param path directory path
+ * @param dir  pointer to directory handle
+ */
 ext2_error_t ext2_dir_open(ext2_t* ext2, const char* path, ext2_dir_t* dir);
+
+/**
+ * Reads an entry from a directory
+ *
+ * The next read to this directory will read the subsequent entry
+ *
+ * @param ext2  pointer to the filesystem struct
+ * @param dir   pointer to directory handle
+ * @param entry pointer to the entry struct
+ */
 ext2_error_t ext2_dir_read(ext2_t* ext2, ext2_dir_t* dir, ext2_dir_record_t* entry);
+
+/**
+ * Changes the read offset of the directory
+ *
+ * Like files, directory also have a read offset. However, this cannot be set
+ * to an arbitrary value since the data stored in a directory has a specific
+ * structure that must be respected. Therefore, the offset value should always
+ * a number that was previously returned by ext2_dir_tell for this directory.
+ * This ensures all ext2_dir_read's happen in the proper boundaries.
+ *
+ * @param ext2   pointer to the filesystem struct
+ * @param dir    pointer to directory handle
+ * @param offset new read offset. This should ALWAYS be a value that was previously
+ *               returned by ext2_dir_tell for this directory, otherwise it WILL
+ *               break something.
+ */
 ext2_error_t ext2_dir_seek(ext2_t* ext2, ext2_dir_t* dir, uint32_t offset);
+
+/**
+ * Returns the current read offset of the directory
+ *
+ * @param ext2   pointer to the filesystem struct
+ * @param dir    pointer to directory handle
+ */
 uint32_t ext2_dir_tell(ext2_t* ext2, const ext2_dir_t* dir);
+
+/**
+ * Creates a directory
+ *
+ * @param ext2 pointer to the filesystem struct
+ * @param path path of the directory
+ */
 ext2_error_t ext2_mkdir(ext2_t* ext2, const char* path);
 
 // REMOVE THESE LATER
