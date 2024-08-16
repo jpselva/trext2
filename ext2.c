@@ -1,5 +1,6 @@
 #include "ext2.h"
 #define CEIL(x, y) ((x)/(y) + (((x) % (y) == 0) ? 0 : 1))
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
 
 // blk_indirection_info
 //
@@ -310,7 +311,7 @@ ext2_error_t get_free_block_in_group(ext2_t* ext2, uint32_t group,
 
     for (int i = 0; i < blocks_per_group/8; i++) {
         uint8_t bitmap_byte;
-        error = ext2->read(bitmap_addr + i*8, 1, &bitmap_byte, ext2->context);
+        error = ext2->read(bitmap_addr + i, 1, &bitmap_byte, ext2->context);
 
         if (error)
             return error;
@@ -328,7 +329,7 @@ ext2_error_t get_free_block_in_group(ext2_t* ext2, uint32_t group,
             *block = i * 8 + shift + data_blocks_start;
 
             bitmap_byte |= (1 << shift);
-            ext2->write(bitmap_addr + i*8, 1, &bitmap_byte, ext2->context);
+            ext2->write(bitmap_addr + i, 1, &bitmap_byte, ext2->context);
 
             bgd.free_blocks_count -= 1;
             write_bgd(ext2, group, &bgd);
@@ -429,19 +430,20 @@ ext2_error_t  write_data(ext2_t* ext2, uint32_t inode, uint32_t offset,
                                   ext2->block_size;
 
     uint32_t sz = size;
+    uint32_t off = offset;
     while (sz > 0) {
         uint32_t datablock;
 
-        if (offset >= allocated_size) {
+        if (off >= allocated_size) {
             error = add_block(ext2, inode, &datablock);
         } else {
-            error = block_map(ext2, inode, offset, &datablock);  
+            error = block_map(ext2, inode, off, &datablock);  
         }
 
         if (error)
             return error;
 
-        uint32_t block_offset = offset % ext2->block_size;
+        uint32_t block_offset = off % ext2->block_size;
         uint32_t remaining = ext2->block_size - block_offset;
         uint32_t bytes_to_write = (remaining < sz) ? remaining : sz;
 
@@ -453,13 +455,13 @@ ext2_error_t  write_data(ext2_t* ext2, uint32_t inode, uint32_t offset,
             return error;
 
         buffer = (uint8_t*)buffer + bytes_to_write;
-        offset += bytes_to_write;
+        off += bytes_to_write;
         sz -= bytes_to_write;
     }
 
     // re-read inode because it might have changed
     error = read_inode(ext2, inode, &inode_struct);
-    inode_struct.size += size;
+    inode_struct.size = MAX(inode_struct.size, offset + size);
     write_inode(ext2, inode, &inode_struct);
 
     return 0;
@@ -552,7 +554,7 @@ ext2_error_t get_free_inode_in_group(ext2_t* ext2, uint32_t group, uint32_t* ino
 
     for (int i = 0; i < ext2->superblk.inodes_per_group/8; i++) {
         uint8_t bitmap_byte;
-        error = ext2->read(bitmap_addr + i*8, 1, &bitmap_byte, ext2->context);
+        error = ext2->read(bitmap_addr + i, 1, &bitmap_byte, ext2->context);
 
         if (error)
             return error;
@@ -570,7 +572,7 @@ ext2_error_t get_free_inode_in_group(ext2_t* ext2, uint32_t group, uint32_t* ino
             *inode = i * 8 + shift + first_inode;
 
             bitmap_byte |= (1 << shift);
-            ext2->write(bitmap_addr + i*8, 1, &bitmap_byte, ext2->context);
+            ext2->write(bitmap_addr + i, 1, &bitmap_byte, ext2->context);
 
             bgd.free_inodes_count -= 1;
             write_bgd(ext2, group, &bgd);
@@ -727,7 +729,14 @@ ext2_error_t link(ext2_t* ext2, uint32_t dir_inode, uint32_t inode,
     if (err)
         return err;
 
-    // TODO: update inode link count
+    ext2_inode_t inode_struct;
+    err = read_inode(ext2, inode, &inode_struct);
+    if (err)
+        return err;
+    inode_struct.links_count += 1;
+    err = write_inode(ext2, inode, &inode_struct);
+    if (err)
+        return err;
 
     return 0;
 }
@@ -926,21 +935,21 @@ ext2_error_t ext2_mkdir(ext2_t* ext2, const char* path) {
     uint32_t parent_inode;
     locate_parent_inode(ext2, path, &parent_inode);
 
-    ext2_directory_entry_t dot;
-    error = create_dir_entry(ext2, inode, ".", &dot);
+    error = link(ext2, inode, inode, ".");
     if (error)
         return error;
 
-    ext2_directory_entry_t dotdot;
-    error = create_dir_entry(ext2, parent_inode, "..", &dotdot);
+    error = link(ext2, inode, parent_inode, "..");
     if (error)
         return error;
 
-    error = add_dir_entry(ext2, inode, &dot);
+    uint32_t group = get_inode_group(ext2, parent_inode);
+    ext2_bgd_t bgd;
+    error = read_bgd(ext2, group, &bgd);
     if (error)
         return error;
-
-    error = add_dir_entry(ext2, inode, &dotdot);
+    bgd.used_dirs_count += 1;
+    error = write_bgd(ext2, group, &bgd);
     if (error)
         return error;
 

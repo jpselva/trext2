@@ -47,5 +47,14 @@ int main(void) {
 
     test("data is correct", strcmp(buf2, buf) == 0);
 
+    err = ext2_file_open(&ext2, "/foo/bar/goodbye", &file);
+
+    test("second file created", err == 0);
+
+    char* buf3 = "hi there";
+    err = ext2_file_write(&ext2, &file, strlen(buf3), buf3);
+
+    test("second write succeeded", err == 0);
+
     return 0;
 }

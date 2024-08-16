@@ -52,7 +52,7 @@ int main(void) {
     test("2nd read inode correct", entry.inode == parent_dir.inode);
 
     ext2_file_t file;
-    ext2_file_open(&ext2, "/foo/bar/hello.txt", &file);
+    ext2_file_open(&ext2, "/foo/hello.txt", &file);
     char* buf = "hi there";
     ext2_file_write(&ext2, &file, strlen(buf), buf);
 
